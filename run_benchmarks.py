@@ -52,10 +52,6 @@ for j, arch in enumerate(archs):
 
         Mem1 = MemoryZone(m, n, v, h, ion_chains, sequence, max_timesteps)
 
-        #Mem1.graph_creator.plot_state([get_idx_from_idc(Mem1.idc_dict, edge_idc) for edge_idc in Mem1.ion_chains.values()], show_plot=True)
-
-        # print(Mem1.graph.edges())
-
         timestep = 0
         while timestep < max_timesteps:
             
@@ -67,14 +63,11 @@ for j, arch in enumerate(archs):
                     next_edge = Mem1.find_next_edge(edge_idc)
                     
                     state_edges_idx = Mem1.get_state_idxs()
-                    #print(edge_idc, next_edge, 'edge_idc, next_edge')
                     if Mem1.have_common_junction_node(edge_idc, next_edge) == False and get_idx_from_idc(Mem1.idc_dict, next_edge) not in state_edges_idx:
                         # update ion chains
                         Mem1.ion_chains[rotate_chain] = next_edge
                     else:
                         need_rotate[i] = True        
-            # print('time step: %s, moved all chains as far as possible' %timestep)
-            #Mem1.graph_creator.plot_state([get_idx_from_idc(Mem1.idc_dict, edge_idc) for edge_idc in Mem1.ion_chains.values()], show_plot=False)
 
             ### calc distance to entry for all chains and determine which chains can rotate
             path_length_sequence = {}
@@ -90,10 +83,6 @@ for j, arch in enumerate(archs):
                 # wenn path von chain größer als alle vorherigen ist -> sum = länge move_sequence -> lassen, sonst -> remove
                 elif sum(np.array([path_length_sequence[rotate_chain]]*len(move_sequence))>np.array([path_length_sequence[chain] for chain in move_sequence])) == len(move_sequence):
                     move_sequence.append(rotate_chain)
-
-            # TODO path lenghts correct?
-            # print('path lengths: ', path_length_sequence)
-            # print('final_move_sequence: ', move_sequence)
 
             all_circles = {}
             ### create circles for all chains in move_sequence (dictionary with chain as key and circle_idcs as value)
@@ -113,11 +102,8 @@ for j, arch in enumerate(archs):
                 else:
                     all_circles[rotate_chain] = [edge_idc] + [next_edge] + Mem1.create_outer_circle(edge_idc, next_edge) + [edge_idc]   # edge idc is added twice to close circle
             
-            # print('all_circles: ', all_circles)
-
             # find circles that can move while first seq ion is moving
             nonfree_circles, free_circle_combs = Mem1.find_circle_idxs_sharing_nodes(all_circles)
-            # print('nonfree_circles: ', nonfree_circles)
             free_circle_seq_idxs = [move_sequence[0]]
             for seq_circ in move_sequence[1:]:
                 nonfree = False
@@ -128,20 +114,13 @@ for j, arch in enumerate(archs):
                 if nonfree == False:
                     free_circle_seq_idxs.append(seq_circ)
 
-            # print('free_circle_seq_idxs: ', free_circle_seq_idxs)
-
             # need circles given in indexes for rotate function
             free_circle_idxs = {}
             for seq_idx in free_circle_seq_idxs:
                 free_circle_idxs[seq_idx] = [get_idx_from_idc(Mem1.idc_dict, edge_idc) for edge_idc in all_circles[seq_idx]]
                 # rotate chains
                 Mem1.rotate(free_circle_idxs[seq_idx])
-            # print('free_circle_idxs: ', free_circle_idxs)
-            # print('\n')
 
-
-            # print('state: ', Mem1.ion_chains, '\n')
-            #Mem1.graph_creator.plot_state([get_idx_from_idc(Mem1.idc_dict, edge_idc) for edge_idc in Mem1.ion_chains.values()], show_plot=True)
             timestep += 1
             if get_idx_from_idc(Mem1.idc_dict, Mem1.ion_chains[sequence[0]]) == get_idx_from_idc(Mem1.idc_dict, Mem1.graph_creator.entry_edge):
                 print('\ntime step: %s, chain %s is at entry edge' %(timestep, sequence[0]))
@@ -151,9 +130,6 @@ for j, arch in enumerate(archs):
                     break
                 sequence = sequence[1:]
             
-        
-    
-    #plt.pause(.5)
     timestep_mean = np.mean(timestep_arr)
     results[j] = timestep_mean
 
