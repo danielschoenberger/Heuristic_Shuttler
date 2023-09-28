@@ -53,18 +53,34 @@ for j, arch in enumerate(archs):
 
         ion_chains, number_of_registers = create_starting_config(perc, graph, seed=seed)
 
-        # new QFT test sequence
-        sequence = [0, 1, 2, 3, 4, 5, 1, 2, 3, 4, 5, 2, 3, 4, 5, 3, 4, 5, 4, 5, 4, 5]
+        sequence = [0, 1, 3, 2]  # TODO no immediately repeating seq elements are possible, e.g. [0, 1, 1, 2]
+        # sequence = list(range(number_of_registers))
+        # 2-qubit sequence -> [2] means, that the 3rd ion in the sequence (ion with id 2) is a 2-qubit gate
+        two_qubit_sequence = [0, 2]
+        assert (
+            two_qubit_sequence[-1] != len(sequence) - 1
+        ), "2-qubit sequence is not valid (last element can not be 2-qubit gate)"
+        for i, elem in enumerate(two_qubit_sequence[:-1]):
+            assert (
+                two_qubit_sequence[i + 1] > elem + 1
+            ), "2-qubit sequence is not valid (can only be 2-qubit gate if next element is at least 2 steps away -> can not do two 2-qubit gate on same ion)"
+
+        seq_element_counter = 0
 
         print(f"arch: {arch}, seed: {seed}, registers: {number_of_registers}\n")
         max_timesteps = 50000
 
         Mem1 = MemoryZone(m, n, v, h, ion_chains, sequence, max_timesteps)
+        timestep = 0
+        print("time step: %s" % timestep)
+
+        seq_ion_was_at_entry = 0
+        next_seq_ion_in_exit = 0
 
         seq_ion_was_at_entry = False
         timestep = 1
         while timestep < max_timesteps:
-            ########### preprocessing ###########
+            ########### PREPROCESSING ###########
             ### move all chains until they need to rotate because they are at a junction (move if path is free and not at a junction)
             need_rotate = [False] * len(sequence)
             while sum(need_rotate) < len(sequence):
@@ -287,13 +303,19 @@ for j, arch in enumerate(archs):
 
             # if seq ion was at entry last timestep -> is now back in memory -> remove from sequence
             if seq_ion_was_at_entry is True:
-                if len(sequence) == 1:
-                    cpu_time_arr.append(time.time() - start_time)
-                    timestep_arr.append(timestep)
-                    print("full circuit executed, resulting time steps: %s" % timestep)
-                    break
-                sequence = sequence[1:]
-                seq_ion_was_at_entry = False
+                # seq_ion_was_at_entry is only True if seq ion is now not in entry anymore (for 2-qubit gates it has to wait in entry):
+                if seq_element_counter == two_qubit_sequence[0] and next_seq_ion_in_exit < 2:
+                    pass
+                else:
+                    if len(sequence) == 1:
+                        cpu_time_arr.append(time.time() - start_time)
+                        timestep_arr.append(timestep)
+                        print("full circuit executed, resulting time steps: %s" % timestep)
+                        break
+                    last_seq_element = sequence[0]
+                    sequence = sequence[1:]
+                    seq_ion_was_at_entry = False
+                    seq_element_counter += 1
 
             # if seq ion is at entry -> has to move out of entry -> then remove from sequence with if clause above in next iteration
             if get_idx_from_idc(Mem1.idc_dict, Mem1.ion_chains[sequence[0]]) == get_idx_from_idc(
