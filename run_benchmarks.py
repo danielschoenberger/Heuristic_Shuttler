@@ -31,16 +31,7 @@ def create_starting_config(perc, graph, seed=None):
     return ion_chains, number_of_registers
 
 
-archs = [
-    [2, 2, 1, 5],
-    [2, 2, 1, 11],
-    [2, 2, 1, 19],
-    [2, 2, 1, 29],
-    [3, 3, 1, 1],
-    [4, 4, 1, 1],
-    [5, 5, 1, 1],
-    [6, 6, 1, 1],
-]
+archs = [[3, 3, 1, 1]]
 seeds = [1]  # , 2, 3, 4, 5, 6, 7, 8, 9, 10]
 perc = 0.5
 results = {}
