@@ -73,6 +73,11 @@ for j, arch in enumerate(archs):
         Mem1 = MemoryZone(m, n, v, h, ion_chains, sequence, max_timesteps)
         timestep = 0
         print("time step: %s" % timestep)
+        Mem1.graph_creator.plot_state(
+            [get_idx_from_idc(Mem1.idc_dict, edge_idc) for edge_idc in Mem1.ion_chains.values()],
+            labels=timestep,
+            show_plot=True,
+        )
 
         seq_ion_was_at_entry = 0
         next_seq_ion_in_exit = 0
@@ -148,6 +153,21 @@ for j, arch in enumerate(archs):
                 # real TODO checken ob in nächstem Schritt frei? -> Müsste hier schon alles nacheinander fahren (also neue Logik einbauen)
                 if not Mem1.check_if_edge_is_filled(next_edge):
                     all_circles[rotate_chain] = [edge_idc, next_edge]
+
+                    # for two-qubit gates: leave ion in entry until gate is processed (other ion was in exit long enough)
+
+                    # entry
+                    # if 2-qubit gate and in entry -> need to wait even if next edge is free
+                    if (
+                        get_idx_from_idc(Mem1.idc_dict, edge_idc)
+                        == get_idx_from_idc(Mem1.idc_dict, Mem1.graph_creator.entry_edge)
+                        and seq_element_counter == two_qubit_sequence[0]
+                    ):
+                        if next_seq_ion_in_exit < 3:
+                            all_circles[rotate_chain] = [edge_idc, edge_idc]
+                        else:
+                            next_seq_ion_in_exit = 0
+                            two_qubit_sequence.pop(0)
 
                 ### move into exit (if next edge is exit)
                 elif get_idx_from_idc(Mem1.idc_dict, next_edge) == get_idx_from_idc(
@@ -298,8 +318,14 @@ for j, arch in enumerate(archs):
                 ]
                 # rotate chains
                 Mem1.rotate(free_circle_idxs[seq_idx])
-            # Mem1.graph_creator.plot_state([get_idx_from_idc(Mem1.idc_dict, edge_idc) for edge_idc in Mem1.ion_chains.values()], show_plot=True)
+
             timestep += 1
+            print("new timestep: %s" % timestep)
+            Mem1.graph_creator.plot_state(
+                [get_idx_from_idc(Mem1.idc_dict, edge_idc) for edge_idc in Mem1.ion_chains.values()],
+                str(timestep),
+                show_plot=True,
+            )
 
             # if seq ion was at entry last timestep -> is now back in memory -> remove from sequence
             if seq_ion_was_at_entry is True:

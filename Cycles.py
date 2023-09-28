@@ -198,8 +198,8 @@ class GraphCreator:
         return self.networkx_graph
 
     # plotting
-    def plot_state(self, ion_moves, plot_ions=True, show_plot=False):
-        # idc_dict = create_idc_dicitonary(nx_g)
+    def plot_state(self, ion_moves, labels, plot_ions=True, show_plot=False):
+        # idc_dict = create_idc_dicitonary(nx_G)
         pos = {(x, y): (y, -x) for i, (x, y) in enumerate(list(self.networkx_graph.nodes()))}
         if plot_ions is True:
             pass
@@ -234,7 +234,7 @@ class GraphCreator:
         node_color = list(nx.get_node_attributes(self.networkx_graph, "color").values())
         edge_labels = nx.get_edge_attributes(self.networkx_graph, "ion_chain")
 
-        plt.figure(figsize=(10, 8))
+        plt.figure(figsize=(8, 6))
         nx.draw_networkx(
             self.networkx_graph,
             pos=pos,
@@ -248,10 +248,12 @@ class GraphCreator:
         nx.draw_networkx_edge_labels(self.networkx_graph, pos, edge_labels)
 
         # reset edge labels
-        for _ in self.networkx_graph.edges():
-            for i, ion in enumerate(ion_moves):
-                ion_edge_idc = get_idc_from_idx(self.idc_dict, ion)
-                self.networkx_graph.add_edge(ion_edge_idc[0], ion_edge_idc[1], ion_chain="", color=colors[i])
+        for i, ion in enumerate(ion_moves):
+            ion_edge_idc = get_idc_from_idx(self.idc_dict, ion)
+            self.networkx_graph.add_edge(ion_edge_idc[0], ion_edge_idc[1], ion_chain="", color=colors[i])
+
+        plt.plot([], [], label=labels)
+        plt.legend()
 
         if show_plot is True:
             plt.show()
