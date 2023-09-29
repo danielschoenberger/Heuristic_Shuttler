@@ -2,11 +2,12 @@ import contextlib
 import math
 import random
 import time
+from collections import Counter
 
 import networkx as nx
 import numpy as np
 
-from Cycles import GraphCreator, MemoryZone, get_idx_from_idc, get_path_to_node
+from Cycles import GraphCreator, MemoryZone, get_idc_from_idx, get_idx_from_idc, get_path_to_node
 
 
 def create_starting_config(perc, graph, seed=None):
@@ -56,14 +57,18 @@ for j, arch in enumerate(archs):
         sequence = [0, 1, 3, 2]  # TODO no immediately repeating seq elements are possible, e.g. [0, 1, 1, 2]
         # sequence = list(range(number_of_registers))
         # 2-qubit sequence -> [2] means, that the 3rd ion in the sequence (ion with id 2) is a 2-qubit gate
-        two_qubit_sequence = [0, 2]
+        two_qubit_sequence = [
+            0,
+            2,
+            -1,
+        ]  # -1 at the end, so two-qubit sequence is not empty after all 2-qubit gates have been processed
         assert (
             two_qubit_sequence[-1] != len(sequence) - 1
         ), "2-qubit sequence is not valid (last element can not be 2-qubit gate)"
-        for i, elem in enumerate(two_qubit_sequence[:-1]):
-            assert (
-                two_qubit_sequence[i + 1] > elem + 1
-            ), "2-qubit sequence is not valid (can only be 2-qubit gate if next element is at least 2 steps away -> can not do two 2-qubit gate on same ion)"
+        # for i, elem in enumerate(two_qubit_sequence[:-1]):
+        #     assert (
+        #         two_qubit_sequence[i + 1] > elem + 1
+        #     ), "2-qubit sequence is not valid (can only be 2-qubit gate if next element is at least 2 steps away -> can not do two 2-qubit gate on same ion)"
 
         seq_element_counter = 0
 
@@ -111,6 +116,20 @@ for j, arch in enumerate(archs):
             path_length_sequence = {}
             move_sequence = []
             for i, rotate_chain in enumerate(sequence):
+                # if 2-qubit gate -> check if second ion is in exit
+                if seq_element_counter == two_qubit_sequence[0] and rotate_chain == sequence[1]:
+                    print(Mem1.ion_chains)
+                    print(
+                        get_idx_from_idc(Mem1.idc_dict, Mem1.ion_chains[rotate_chain]),
+                        rotate_chain,
+                        get_idx_from_idc(Mem1.idc_dict, Mem1.graph_creator.exit_edge),
+                        get_idc_from_idx(Mem1.idc_dict, 9),
+                    )
+                    if get_idx_from_idc(Mem1.idc_dict, Mem1.ion_chains[rotate_chain]) == get_idx_from_idc(
+                        Mem1.idc_dict, Mem1.graph_creator.exit_edge
+                    ):
+                        next_seq_ion_in_exit += 1
+
                 edge_idc = Mem1.ion_chains[rotate_chain]
                 path_to_go = nx.shortest_path(
                     Mem1.graph,
@@ -158,6 +177,10 @@ for j, arch in enumerate(archs):
 
                     # entry
                     # if 2-qubit gate and in entry -> need to wait even if next edge is free
+                    print("\nnext edge free")
+                    print("seq_element_counter: %s" % seq_element_counter)
+                    print("two_qubit_sequence: %s" % two_qubit_sequence)
+                    print("next_seq_ion_in_exit: %s" % next_seq_ion_in_exit, "\n")
                     if (
                         get_idx_from_idc(Mem1.idc_dict, edge_idc)
                         == get_idx_from_idc(Mem1.idc_dict, Mem1.graph_creator.entry_edge)
@@ -256,6 +279,18 @@ for j, arch in enumerate(archs):
 
                     all_circles[rotate_chain] = path
 
+                    # if 2-qubit gate and in entry -> need to wait
+                    print("\npath through pz")
+                    print("seq_element_counter: %s" % seq_element_counter)
+                    print("two_qubit_sequence: %s" % two_qubit_sequence)
+                    print("next_seq_ion_in_exit: %s" % next_seq_ion_in_exit, "\n")
+                    if seq_element_counter == two_qubit_sequence[0]:
+                        if next_seq_ion_in_exit < 3:
+                            all_circles[rotate_chain] = [edge_idc, edge_idc]
+                        else:
+                            next_seq_ion_in_exit = 0
+                            two_qubit_sequence.pop(0)
+
                 ### move within memory zone (circles)
                 else:
                     all_circles[rotate_chain] = [
@@ -264,6 +299,8 @@ for j, arch in enumerate(archs):
                         *Mem1.create_outer_circle(edge_idc, next_edge),
                         edge_idc,
                     ]  # edge idc is added twice to close circle
+
+            print("all circles before pz combination: %s" % all_circles)
 
             # if pz node is in circles -> combine them to one circle
             first_circle = -1
@@ -281,11 +318,16 @@ for j, arch in enumerate(archs):
                         else:
                             # here new function needed
                             if all(edge in all_circles[circle] for edge in all_circles[first_circle]):
+                                # check if a "wait" move (edge, edge) is in first circle -> happens for 2-qubit gates in entry (ion in entry waits) -> don't combine circles
+                                counter_first_circle = Counter(all_circles[first_circle])
+                                if 2 in counter_first_circle.values():
+                                    break
                                 all_circles[first_circle] = all_circles[circle].copy()
                                 del all_circles[circle]
                                 move_sequence.remove(circle)
                             elif all(edge in all_circles[first_circle] for edge in all_circles[circle]):
-                                del all_circles[circle]
+                                counter_first_circle = Counter(all_circles[first_circle])
+                                del all_circles[circle]  # always delete circle and keep first circle (priority queue)
                                 move_sequence.remove(circle)
                             else:
                                 all_circles[first_circle] = Mem1.combine_paths_over_pz(
@@ -297,6 +339,8 @@ for j, arch in enumerate(archs):
                             break
                     if inner_if_broken:
                         break
+
+            print("all circles after pz combination: %s" % all_circles)
 
             # find circles that can move while first seq ion is moving
             nonfree_circles, free_circle_combs = Mem1.find_nonfree_and_free_circle_idxs(all_circles)
@@ -330,7 +374,7 @@ for j, arch in enumerate(archs):
             # if seq ion was at entry last timestep -> is now back in memory -> remove from sequence
             if seq_ion_was_at_entry is True:
                 # seq_ion_was_at_entry is only True if seq ion is now not in entry anymore (for 2-qubit gates it has to wait in entry):
-                if seq_element_counter == two_qubit_sequence[0] and next_seq_ion_in_exit < 2:
+                if seq_element_counter == two_qubit_sequence[0] and next_seq_ion_in_exit < 3:
                     pass
                 else:
                     if len(sequence) == 1:
