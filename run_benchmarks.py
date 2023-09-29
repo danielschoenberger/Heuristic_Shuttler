@@ -57,14 +57,13 @@ for j, arch in enumerate(archs):
         sequence = [0, 1, 3, 2]  # TODO no immediately repeating seq elements are possible, e.g. [0, 1, 1, 2]
         # sequence = list(range(number_of_registers))
         # 2-qubit sequence -> [2] means, that the 3rd ion in the sequence (ion with id 2) is a 2-qubit gate
-        two_qubit_sequence = [
-            0,
-            2,
-            -1,
-        ]  # -1 at the end, so two-qubit sequence is not empty after all 2-qubit gates have been processed
+        two_qubit_sequence = [0, 2]
         assert (
             two_qubit_sequence[-1] != len(sequence) - 1
         ), "2-qubit sequence is not valid (last element can not be 2-qubit gate)"
+        two_qubit_sequence.append(
+            -1
+        )  # -1 at the end, so two-qubit sequence is not empty after all 2-qubit gates have been processed
         # for i, elem in enumerate(two_qubit_sequence[:-1]):
         #     assert (
         #         two_qubit_sequence[i + 1] > elem + 1
