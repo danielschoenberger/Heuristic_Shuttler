@@ -54,20 +54,35 @@ for j, arch in enumerate(archs):
 
         ion_chains, number_of_registers = create_starting_config(perc, graph, seed=seed)
 
-        sequence = [0, 1, 3, 2]  # TODO no immediately repeating seq elements are possible, e.g. [0, 1, 1, 2]
-        # sequence = list(range(number_of_registers))
+        sequence = [
+            0,
+            1,
+            3,
+            2,
+            1,
+            3,
+            2,
+            0,
+            1,
+        ]  # TODO no immediately repeating seq elements are possible, e.g. [0, 1, 1, 2]
+        # sequence = [0, 1, 0, 2, 0, 3, 0, 4, 0, 5, 0, 1, 2, 1, 3, 1, 4, 1, 5, 1, 2, 3, 2, 4, 2, 5, 2, 3, 4, 3, 5, 3, 4, 5, 4, 5]
+
         # 2-qubit sequence -> [2] means, that the 3rd ion in the sequence (ion with id 2) is a 2-qubit gate
-        two_qubit_sequence = [0, 2]
+        two_qubit_sequence = [0, 2, 4, 6]
+        # two_qubit_sequence = [1, 2, 3, 4, 5, 7, 8, 9, 10, 12, 13, 14, 16, 17, 19]
+
         assert (
             two_qubit_sequence[-1] != len(sequence) - 1
         ), "2-qubit sequence is not valid (last element can not be 2-qubit gate)"
         two_qubit_sequence.append(
             -1
         )  # -1 at the end, so two-qubit sequence is not empty after all 2-qubit gates have been processed
-        # for i, elem in enumerate(two_qubit_sequence[:-1]):
-        #     assert (
-        #         two_qubit_sequence[i + 1] > elem + 1
-        #     ), "2-qubit sequence is not valid (can only be 2-qubit gate if next element is at least 2 steps away -> can not do two 2-qubit gate on same ion)"
+
+        # unique sequence is sequence without repeating elements (for move_sequence and 2-qubit gates)
+        unique_sequence = []
+        for seq_elem in sequence:
+            if seq_elem not in unique_sequence:
+                unique_sequence.append(seq_elem)
 
         seq_element_counter = 0
 
@@ -114,7 +129,9 @@ for j, arch in enumerate(archs):
             ### calc distance to entry for all chains and determine which chains can rotate
             path_length_sequence = {}
             move_sequence = []
-            for i, rotate_chain in enumerate(sequence):
+            for i, rotate_chain in enumerate(
+                unique_sequence
+            ):  # TODO hier Fehler -> sequence hat ions doppelt -> looped durch ganze sequence
                 # if 2-qubit gate -> check if second ion is in exit
                 if seq_element_counter == two_qubit_sequence[0] and rotate_chain == sequence[1]:
                     print(Mem1.ion_chains)
@@ -385,6 +402,11 @@ for j, arch in enumerate(archs):
                     sequence = sequence[1:]
                     seq_ion_was_at_entry = False
                     seq_element_counter += 1
+                    unique_sequence = []
+                    for seq_elem in sequence:
+                        if seq_elem not in unique_sequence:
+                            unique_sequence.append(seq_elem)
+                    print("unique", unique_sequence)
 
             # if seq ion is at entry -> has to move out of entry -> then remove from sequence with if clause above in next iteration
             if get_idx_from_idc(Mem1.idc_dict, Mem1.ion_chains[sequence[0]]) == get_idx_from_idc(
@@ -402,3 +424,7 @@ print("\n archs: \n", dict(enumerate(archs)))
 print("results: \n", results)
 print("cpu time results: \n", cpu_time_results)
 print("time all: \n", time.time() - start_time_all)
+
+# TODO Schalter
+# TODO cut sequence? Unique sequence reasonable?
+# TODO repeating sequence elements
