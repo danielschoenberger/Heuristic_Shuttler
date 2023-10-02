@@ -260,7 +260,7 @@ class GraphCreator:
 
 
 class MemoryZone:
-    def __init__(self, m, n, v, h, starting_config, starting_sequence, max_timestep):
+    def __init__(self, m, n, v, h, starting_config, starting_sequence, max_timestep, time_pz=1):
         # new graph MZ
         self.mz_Graph_creator = MZGraphCreator(m, n, v, h)
         self.mz_Graph = self.mz_Graph_creator.get_graph()
@@ -270,6 +270,7 @@ class MemoryZone:
         self.starting_config = starting_config
         self.starting_sequence = starting_sequence
         self.max_timestep = max_timestep
+        self.time_pz = time_pz
         self.num_ion_chains = len(starting_config)
         self.idc_dict = self.graph_creator.idc_dict
 
@@ -309,19 +310,25 @@ class MemoryZone:
 
         return ion_chains_idx
 
-    def find_next_edge(self, edge_idc):
+    def find_next_edge(self, edge_idc, towards=(0, 0)):
         ### find next edge given edge_idc of ion chain
-        # now only works for one ion chain instead of multiple connected chains
 
         # if in exit or entry -> move through processing zone
         if get_idx_from_idc(self.idc_dict, edge_idc) == get_idx_from_idc(self.idc_dict, self.graph_creator.exit_edge):
             return self.graph_creator.entry_edge
         if get_idx_from_idc(self.idc_dict, edge_idc) == get_idx_from_idc(self.idc_dict, self.graph_creator.entry_edge):
-            next_edge = next(
-                edge
-                for edge in self.graph.edges(self.graph_creator.entry)
-                if edge not in (self.graph_creator.entry_edge, self.path_entry_to_exit[0])
-            )
+            if towards == (0, 0):
+                next_edge = next(
+                    edge
+                    for edge in self.graph.edges(self.graph_creator.entry)
+                    if edge not in (self.graph_creator.entry_edge, self.path_entry_to_exit[0])
+                )
+            elif towards == "exit":
+                next_edge = self.path_entry_to_exit[0]
+            else:
+                msg = "towards must be (0,0) or 'exit'"
+                raise ValueError(msg)
+
             # assert that next edge after entry is not entry or exit
             assert get_idx_from_idc(self.idc_dict, next_edge) != get_idx_from_idc(
                 self.idc_dict, self.graph_creator.exit_edge

@@ -88,8 +88,9 @@ for j, arch in enumerate(archs):
 
         print(f"arch: {arch}, seed: {seed}, registers: {number_of_registers}\n")
         max_timesteps = 50000
+        time_pz = 2
 
-        Mem1 = MemoryZone(m, n, v, h, ion_chains, sequence, max_timesteps)
+        Mem1 = MemoryZone(m, n, v, h, ion_chains, sequence, max_timesteps, time_pz=time_pz)
         timestep = 0
         print("time step: %s" % timestep)
         Mem1.graph_creator.plot_state(
@@ -179,7 +180,14 @@ for j, arch in enumerate(archs):
             ### create circles for all chains in move_sequence (dictionary with chain as key and circle_idcs as value)
             for rotate_chain in move_sequence:
                 edge_idc = Mem1.ion_chains[rotate_chain]
-                next_edge = Mem1.find_next_edge(edge_idc)
+                if (
+                    rotate_chain in sequence[1:]
+                ):  # if chain is needed again (is present in rest of sequence) -> move (only out of entry) towards exit instead of top left
+                    next_edge = Mem1.find_next_edge(edge_idc, towards="exit")
+                    # print('next edge towards exit', rotate_chain, sequence[1:])
+                else:
+                    next_edge = Mem1.find_next_edge(edge_idc, towards=(0, 0))
+                    # print('next edge towards top left', rotate_chain, sequence[1:])
 
                 # make edge_idc and next_edge consistent
                 edge_idc, next_edge = Mem1.find_ordered_edges(edge_idc, next_edge)
@@ -202,7 +210,7 @@ for j, arch in enumerate(archs):
                         == get_idx_from_idc(Mem1.idc_dict, Mem1.graph_creator.entry_edge)
                         and seq_element_counter == two_qubit_sequence[0]
                     ):
-                        if next_seq_ion_in_exit < 3:
+                        if next_seq_ion_in_exit < Mem1.time_pz:
                             all_circles[rotate_chain] = [edge_idc, edge_idc]
                         else:
                             next_seq_ion_in_exit = 0
@@ -301,7 +309,7 @@ for j, arch in enumerate(archs):
                     print("two_qubit_sequence: %s" % two_qubit_sequence)
                     print("next_seq_ion_in_exit: %s" % next_seq_ion_in_exit, "\n")
                     if seq_element_counter == two_qubit_sequence[0]:
-                        if next_seq_ion_in_exit < 3:
+                        if next_seq_ion_in_exit < Mem1.time_pz:
                             all_circles[rotate_chain] = [edge_idc, edge_idc]
                         else:
                             next_seq_ion_in_exit = 0
@@ -390,7 +398,7 @@ for j, arch in enumerate(archs):
             # if seq ion was at entry last timestep -> is now back in memory -> remove from sequence
             if seq_ion_was_at_entry is True:
                 # seq_ion_was_at_entry is only True if seq ion is now not in entry anymore (for 2-qubit gates it has to wait in entry):
-                if seq_element_counter == two_qubit_sequence[0] and next_seq_ion_in_exit < 3:
+                if seq_element_counter == two_qubit_sequence[0] and next_seq_ion_in_exit < Mem1.time_pz:
                     pass
                 else:
                     if len(sequence) == 1:
