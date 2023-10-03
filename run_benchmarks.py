@@ -114,6 +114,7 @@ for j, arch in enumerate(archs):
                     next_edge = Mem1.find_next_edge(edge_idc)
 
                     state_edges_idx = Mem1.get_state_idxs()
+                    print(state_edges_idx)
                     if (
                         Mem1.have_common_junction_node(edge_idc, next_edge) is False
                         and get_idx_from_idc(Mem1.idc_dict, next_edge) not in state_edges_idx
@@ -130,9 +131,7 @@ for j, arch in enumerate(archs):
             ### calc distance to entry for all chains and determine which chains can rotate
             path_length_sequence = {}
             move_sequence = []
-            for i, rotate_chain in enumerate(
-                unique_sequence
-            ):  # TODO hier Fehler -> sequence hat ions doppelt -> looped durch ganze sequence
+            for i, rotate_chain in enumerate(unique_sequence):
                 # if 2-qubit gate -> check if second ion is in exit
                 if seq_element_counter == two_qubit_sequence[0] and rotate_chain == sequence[1]:
                     print(Mem1.ion_chains)
@@ -176,8 +175,15 @@ for j, arch in enumerate(archs):
                     move_sequence = [rotate_chain, *move_sequence]
 
             ######### ROTATE CHAINS #########
-            all_circles = {}
+            # first find chain in entry edge (if present -> then also present in move_sequence)
+            for rotate_chain in move_sequence:
+                if get_idx_from_idc(Mem1.idc_dict, Mem1.ion_chains[rotate_chain]) == get_idx_from_idc(
+                    Mem1.idc_dict, Mem1.graph_creator.entry_edge
+                ):
+                    chain_in_entry = rotate_chain
+
             ### create circles for all chains in move_sequence (dictionary with chain as key and circle_idcs as value)
+            all_circles = {}
             for rotate_chain in move_sequence:
                 edge_idc = Mem1.ion_chains[rotate_chain]
                 if (
@@ -220,8 +226,12 @@ for j, arch in enumerate(archs):
                 elif get_idx_from_idc(Mem1.idc_dict, next_edge) == get_idx_from_idc(
                     Mem1.idc_dict, Mem1.graph_creator.exit_edge
                 ):
-                    # now here same logic as for entry edge below
-                    top_left_free_edge_idc = Mem1.bfs_free_edge((0, 0))
+                    if (
+                        Mem1.ion_chains[chain_in_entry] in sequence[1:]
+                    ):  # if chain in entry is needed again (is present in rest of sequence) -> move (only out of entry) towards exit instead of top left
+                        top_left_free_edge_idc = Mem1.bfs_free_edge(Mem1.graph_creator.exit)
+                    else:
+                        top_left_free_edge_idc = Mem1.bfs_free_edge((0, 0))
                     path0 = get_path_to_node(
                         Mem1.graph,
                         Mem1.graph_creator.processing_zone,
@@ -250,7 +260,12 @@ for j, arch in enumerate(archs):
                 elif get_idx_from_idc(Mem1.idc_dict, next_edge) == get_idx_from_idc(
                     Mem1.idc_dict, Mem1.graph_creator.entry_edge
                 ):
-                    top_left_free_edge_idc = Mem1.bfs_free_edge((0, 0))
+                    if (
+                        Mem1.ion_chains[chain_in_entry] in sequence[1:]
+                    ):  # if chain in entry is needed again (is present in rest of sequence) -> move (only out of entry) towards exit instead of top left
+                        top_left_free_edge_idc = Mem1.bfs_free_edge(Mem1.graph_creator.exit)
+                    else:
+                        top_left_free_edge_idc = Mem1.bfs_free_edge((0, 0))
                     path0 = get_path_to_node(
                         Mem1.graph,
                         Mem1.graph_creator.processing_zone,
@@ -279,7 +294,13 @@ for j, arch in enumerate(archs):
                     Mem1.idc_dict, Mem1.graph_creator.entry_edge
                 ):
                     # same logic as for entry edge above
-                    top_left_free_edge_idc = Mem1.bfs_free_edge((0, 0))
+                    if (
+                        Mem1.ion_chains[rotate_chain] in sequence[1:]
+                    ):  # if chain in entry is needed again (is present in rest of sequence) -> move (only out of entry) towards exit instead of top left
+                        top_left_free_edge_idc = Mem1.bfs_free_edge(Mem1.graph_creator.exit)
+                    else:
+                        top_left_free_edge_idc = Mem1.bfs_free_edge((0, 0))
+                    # assert chain_in_entry == get_idx_from_idc(Mem1.idc_dict, edge_idc), "chain_in_entry is not equal to edge_idc, which is the chain in entry in this case"
                     path0 = get_path_to_node(
                         Mem1.graph,
                         Mem1.graph_creator.processing_zone,
@@ -414,7 +435,6 @@ for j, arch in enumerate(archs):
                     for seq_elem in sequence:
                         if seq_elem not in unique_sequence:
                             unique_sequence.append(seq_elem)
-                    print("unique", unique_sequence)
 
             # if seq ion is at entry -> has to move out of entry -> then remove from sequence with if clause above in next iteration
             if get_idx_from_idc(Mem1.idc_dict, Mem1.ion_chains[sequence[0]]) == get_idx_from_idc(
