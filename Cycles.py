@@ -475,32 +475,36 @@ class MemoryZone:
 
         pre_fct_dict = circles_dict.copy()
 
-        # Find pairs of paths that share a junction node
+        def get_circle_nodes(circle):
+            # if next edge is free -> circle is just two edges -> can skip first and last node
+            if len(circles_dict[circle]) == 2:
+                if circles_dict[circle][0] != circles_dict[circle][1]:
+                    circle_or_path = [(circles_dict[circle][0][1], circles_dict[circle][1][0])]
+                else:  # else if path is same edge twice skip completely
+                    circle_or_path = [(circles_dict[circle][0][0], circles_dict[circle][0][0])]
+            # if circle is real circle -> need to check all nodes
+            elif circles_dict[circle][0] == circles_dict[circle][-1]:
+                circle_or_path = circles_dict[circle]
+            # if circle is only a path -> can skip first and last node
+            elif circles_dict[circle][-1] == circles_dict[circle][-2]:
+                circle_or_path = circles_dict[circle][1:-2]
+            else:
+                circle_or_path = circles_dict[circle][1:-1]
+
+            nodes = set()
+            for edge in circle_or_path:
+                node1, node2 = edge
+                if node1 == node2:
+                    nodes.add(node1)
+                else:
+                    nodes.add(node1)
+                    nodes.add(node2)
+            return nodes
+
         junction_shared_pairs = []
         for circle1, circle2 in combinations_of_circles:
-            # if circle is real circle -> need to check all nodes
-            if circles_dict[circle1][0] == circles_dict[circle1][-1]:
-                circle_or_path = circles_dict[circle1]
-            # if circle is only a path -> can skip first and last node
-            else:
-                circle_or_path = circles_dict[circle1][1:-1]
-            nodes1 = set()
-            for edge in circle_or_path:
-                node1, node2 = edge
-                nodes1.add(node1)
-                nodes1.add(node2)
-            # if circle is real circle -> need to check all nodes (also includes paths of len(2) -> because if next edge is free -> circle is just 2 edges)
-            if circles_dict[circle2][0] == circles_dict[circle2][-1] or len(circles_dict[circle2]) == 2:
-                circle_or_path = circles_dict[circle2]
-            # if circle is only a path -> can skip first and last node
-            else:
-                circle_or_path = circles_dict[circle2][1:-1]
-            nodes2 = set()
-            for edge in circle_or_path:
-                node1, node2 = edge
-                nodes2.add(node1)
-                nodes2.add(node2)
-
+            nodes1 = get_circle_nodes(circle1)
+            nodes2 = get_circle_nodes(circle2)
             if len(nodes1.intersection(nodes2).intersection(junction_nodes)) > 0:
                 junction_shared_pairs.append((circle1, circle2))
 
@@ -544,6 +548,8 @@ class MemoryZone:
         state_idxs = self.get_state_idxs()
         for edge_idc in nx.edge_bfs(self.mz_Graph, node):
             if get_idx_from_idc(self.idc_dict, edge_idc) not in state_idxs:
+                print(f"found free edge {edge_idc} starting from: {node}")
+                # still at beginning one error
                 return edge_idc
         return None
 

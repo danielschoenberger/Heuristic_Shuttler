@@ -7,7 +7,7 @@ from collections import Counter
 import networkx as nx
 import numpy as np
 
-from Cycles import GraphCreator, MemoryZone, get_idc_from_idx, get_idx_from_idc, get_path_to_node
+from Cycles import GraphCreator, MemoryZone, get_idx_from_idc, get_path_to_node
 
 
 def create_starting_config(perc, graph, seed=None):
@@ -66,6 +66,8 @@ for j, arch in enumerate(archs):
             1,
         ]  # TODO no immediately repeating seq elements are possible, e.g. [0, 1, 1, 2]
         # sequence = [0, 1, 0, 2, 0, 3, 0, 4, 0, 5, 0, 1, 2, 1, 3, 1, 4, 1, 5, 1, 2, 3, 2, 4, 2, 5, 2, 3, 4, 3, 5, 3, 4, 5, 4, 5]
+        # chain in entry is first sequence element at the start
+        chain_in_entry = sequence[0]
 
         # 2-qubit sequence -> [2] means, that the 3rd ion in the sequence (ion with id 2) is a 2-qubit gate
         two_qubit_sequence = [0, 2, 4, 6]
@@ -114,7 +116,7 @@ for j, arch in enumerate(archs):
                     next_edge = Mem1.find_next_edge(edge_idc)
 
                     state_edges_idx = Mem1.get_state_idxs()
-                    print(state_edges_idx)
+
                     if (
                         Mem1.have_common_junction_node(edge_idc, next_edge) is False
                         and get_idx_from_idc(Mem1.idc_dict, next_edge) not in state_edges_idx
@@ -133,18 +135,13 @@ for j, arch in enumerate(archs):
             move_sequence = []
             for i, rotate_chain in enumerate(unique_sequence):
                 # if 2-qubit gate -> check if second ion is in exit
-                if seq_element_counter == two_qubit_sequence[0] and rotate_chain == sequence[1]:
-                    print(Mem1.ion_chains)
-                    print(
-                        get_idx_from_idc(Mem1.idc_dict, Mem1.ion_chains[rotate_chain]),
-                        rotate_chain,
-                        get_idx_from_idc(Mem1.idc_dict, Mem1.graph_creator.exit_edge),
-                        get_idc_from_idx(Mem1.idc_dict, 9),
-                    )
-                    if get_idx_from_idc(Mem1.idc_dict, Mem1.ion_chains[rotate_chain]) == get_idx_from_idc(
-                        Mem1.idc_dict, Mem1.graph_creator.exit_edge
-                    ):
-                        next_seq_ion_in_exit += 1
+                if (
+                    seq_element_counter == two_qubit_sequence[0]
+                    and rotate_chain == sequence[1]
+                    and get_idx_from_idc(Mem1.idc_dict, Mem1.ion_chains[rotate_chain])
+                    == get_idx_from_idc(Mem1.idc_dict, Mem1.graph_creator.exit_edge)
+                ):
+                    next_seq_ion_in_exit += 1
 
                 edge_idc = Mem1.ion_chains[rotate_chain]
                 path_to_go = nx.shortest_path(
@@ -163,7 +160,7 @@ for j, arch in enumerate(archs):
                 ) == len(move_sequence):
                     move_sequence.append(rotate_chain)
 
-                # change path of chain if it is in the entry edge (to 0, so it doesn't block others when it is the first one)
+                # change path of chain if it is in entry edge (to 0, so it doesn't block others when it is the first one)
                 if get_idx_from_idc(Mem1.idc_dict, edge_idc) == get_idx_from_idc(
                     Mem1.idc_dict, Mem1.graph_creator.entry_edge
                 ):
@@ -227,7 +224,7 @@ for j, arch in enumerate(archs):
                     Mem1.idc_dict, Mem1.graph_creator.exit_edge
                 ):
                     if (
-                        Mem1.ion_chains[chain_in_entry] in sequence[1:]
+                        chain_in_entry in sequence[1:]
                     ):  # if chain in entry is needed again (is present in rest of sequence) -> move (only out of entry) towards exit instead of top left
                         top_left_free_edge_idc = Mem1.bfs_free_edge(Mem1.graph_creator.exit)
                     else:
@@ -261,7 +258,7 @@ for j, arch in enumerate(archs):
                     Mem1.idc_dict, Mem1.graph_creator.entry_edge
                 ):
                     if (
-                        Mem1.ion_chains[chain_in_entry] in sequence[1:]
+                        chain_in_entry in sequence[1:]
                     ):  # if chain in entry is needed again (is present in rest of sequence) -> move (only out of entry) towards exit instead of top left
                         top_left_free_edge_idc = Mem1.bfs_free_edge(Mem1.graph_creator.exit)
                     else:
@@ -295,7 +292,7 @@ for j, arch in enumerate(archs):
                 ):
                     # same logic as for entry edge above
                     if (
-                        Mem1.ion_chains[rotate_chain] in sequence[1:]
+                        rotate_chain in sequence[1:]
                     ):  # if chain in entry is needed again (is present in rest of sequence) -> move (only out of entry) towards exit instead of top left
                         top_left_free_edge_idc = Mem1.bfs_free_edge(Mem1.graph_creator.exit)
                     else:
@@ -360,8 +357,8 @@ for j, arch in enumerate(archs):
                             first_circle = circle
                             inner_if_broken = True
                             break
-                        else:
-                            # here new function needed
+                        else:  # Bricht hier, weil sollte warten und circles in pz nicht kombinieren, aber beide circles sind jetzt trotzdem in move sequence -> schiebt trotzdem durch
+                            # wait move is special, nur in pz, könnte man daher auch speziell behandeln, zb wait move zählt nur erste node mit statt gar keine
                             if all(edge in all_circles[circle] for edge in all_circles[first_circle]):
                                 # check if a "wait" move (edge, edge) is in first circle -> happens for 2-qubit gates in entry (ion in entry waits) -> don't combine circles
                                 counter_first_circle = Counter(all_circles[first_circle])
@@ -406,6 +403,7 @@ for j, arch in enumerate(archs):
                     get_idx_from_idc(Mem1.idc_dict, edge_idc) for edge_idc in all_circles[seq_idx]
                 ]
                 # rotate chains
+                print("seq_idx", seq_idx)
                 Mem1.rotate(free_circle_idxs[seq_idx])
 
             timestep += 1
