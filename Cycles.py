@@ -234,7 +234,8 @@ class GraphCreator:
         node_color = list(nx.get_node_attributes(self.networkx_graph, "color").values())
         edge_labels = nx.get_edge_attributes(self.networkx_graph, "ion_chain")
 
-        plt.figure(figsize=(8, 6))
+        # plt.figure(figsize=(25, 15))
+        plt.figure(figsize=(15, 8))
         nx.draw_networkx(
             self.networkx_graph,
             pos=pos,
@@ -263,7 +264,7 @@ class MemoryZone:
     def __init__(self, m, n, v, h, starting_config, starting_sequence, max_timestep, time_pz=1):
         # new graph MZ
         self.mz_Graph_creator = MZGraphCreator(m, n, v, h)
-        self.mz_Graph = self.mz_Graph_creator.get_graph()
+        self.mz_graph = self.mz_Graph_creator.get_graph()
 
         self.graph_creator = GraphCreator(m, n, v, h)
         self.graph = self.graph_creator.get_graph()
@@ -301,6 +302,10 @@ class MemoryZone:
         self.path_entry_to_exit = get_path_to_node(
             self.graph, self.graph_creator.entry, self.graph_creator.exit, exclude_entry=True
         )
+
+        # precalulculate bfs for top left and exit
+        self.bfs_top_left = nx.edge_bfs(self.mz_graph, (0, 0))
+        self.bfs_exit = nx.edge_bfs(self.mz_graph, self.graph_creator.exit)
 
     # get ion chains as idxs
     def get_state_idxs(self):
@@ -546,11 +551,19 @@ class MemoryZone:
 
     def bfs_free_edge(self, node):
         state_idxs = self.get_state_idxs()
-        for edge_idc in nx.edge_bfs(self.mz_Graph, node):
-            if get_idx_from_idc(self.idc_dict, edge_idc) not in state_idxs:
-                print(f"found free edge {edge_idc} starting from: {node}")
-                # still at beginning one error
-                return edge_idc
+        if node == (0, 0):
+            for edge_idc in self.bfs_top_left:
+                if get_idx_from_idc(self.idc_dict, edge_idc) not in state_idxs:
+                    return edge_idc
+        elif node == self.graph_creator.exit:
+            print(self.bfs_exit)
+            for edge_idc in self.bfs_exit:
+                if get_idx_from_idc(self.idc_dict, edge_idc) not in state_idxs:
+                    return edge_idc
+        else:
+            for edge_idc in nx.edge_bfs(self.mz_graph, node):
+                if get_idx_from_idc(self.idc_dict, edge_idc) not in state_idxs:
+                    return edge_idc
         return None
 
     def combine_paths_over_pz(self, path0, path1):
@@ -561,6 +574,7 @@ class MemoryZone:
 
         # new: if path0 doesn't start at processing zone -> was already combined with other chain -> extract path after processing zone (path0[1:])
         if path0[0][0] != self.graph_creator.processing_zone:
+            print("path0: ", path0)
             # extract path after self.graph_creator.processing_zone
             assert path0[1][0] == self.graph_creator.processing_zone
             path_from_pz = path0[1:]
