@@ -478,8 +478,6 @@ class MemoryZone:
         junction_nodes = [*self.junction_nodes, self.graph_creator.processing_zone]
         combinations_of_circles = list(distinct_combinations(circles_dict.keys(), 2))
 
-        pre_fct_dict = circles_dict.copy()
-
         def get_circle_nodes(circle):
             # if next edge is free -> circle is just two edges -> can skip first and last node
             if len(circles_dict[circle]) == 2:
@@ -510,16 +508,27 @@ class MemoryZone:
         for circle1, circle2 in combinations_of_circles:
             nodes1 = get_circle_nodes(circle1)
             nodes2 = get_circle_nodes(circle2)
-            if len(nodes1.intersection(nodes2).intersection(junction_nodes)) > 0:
+            if len(nodes1.intersection(nodes2).intersection(junction_nodes)) > 0 or (
+                get_idx_from_idc(self.idc_dict, circles_dict[circle1][-1])
+                == (get_idx_from_idc(self.idc_dict, circles_dict[circle2][-1]))
+            ):
                 junction_shared_pairs.append((circle1, circle2))
 
         free_circle_combs = [
             circle_idx_pair
             for circle_idx_pair in combinations_of_circles
-            if circle_idx_pair not in junction_shared_pairs
+            if (circle_idx_pair not in junction_shared_pairs)
         ]
+        print("1", free_circle_combs)
 
-        assert pre_fct_dict == circles_dict, "circles_dict changed"
+        # free_circle_combs = [
+        #     circle_idx_pair
+        #     for circle_idx_pair in combinations_of_circles
+        #     if (circle_idx_pair not in junction_shared_pairs
+        #     and (get_idx_from_idc(self.idc_dict, circles_dict[circle_idx_pair[0]][-1])
+        #     != (get_idx_from_idc(self.idc_dict, circles_dict[circle_idx_pair[1]][-1]))))   # new extra clause (path out of pz could end in same edge as a move to a free edge)
+        # ]
+        print("2", free_circle_combs)
 
         return junction_shared_pairs, free_circle_combs
 
@@ -551,19 +560,29 @@ class MemoryZone:
 
     def bfs_free_edge(self, node):
         state_idxs = self.get_state_idxs()
-        if node == (0, 0):
-            for edge_idc in self.bfs_top_left:
-                if get_idx_from_idc(self.idc_dict, edge_idc) not in state_idxs:
-                    return edge_idc
-        elif node == self.graph_creator.exit:
-            print(self.bfs_exit)
-            for edge_idc in self.bfs_exit:
-                if get_idx_from_idc(self.idc_dict, edge_idc) not in state_idxs:
-                    return edge_idc
-        else:
-            for edge_idc in nx.edge_bfs(self.mz_graph, node):
-                if get_idx_from_idc(self.idc_dict, edge_idc) not in state_idxs:
-                    return edge_idc
+        # if node == (0, 0):
+        #     for edge_idc in self.bfs_top_left:
+        #         if get_idx_from_idc(self.idc_dict, edge_idc) not in state_idxs:
+        #             return edge_idc
+        # elif node == self.graph_creator.exit:
+        #     print('exit bfs', list(self.bfs_exit), self.bfs_exit)
+        #     print('vorher')
+        #     for i in list(self.bfs_exit):
+        #         print(i, 'non_nx')
+        #     for s in nx.edge_bfs(self.mz_graph, self.graph_creator.exit):
+        #         print(s, 'nx')
+        #     print('nachher')
+        #     for edge_idc in self.bfs_exit:
+        #         print(edge_idc, 'edge_idc', get_idx_from_idc(self.idc_dict, edge_idc) not in state_idxs)
+        #         if get_idx_from_idc(self.idc_dict, edge_idc) not in state_idxs:
+        #             return edge_idc
+        # else:
+        #     for edge_idc in nx.edge_bfs(self.mz_graph, node):
+        #         if get_idx_from_idc(self.idc_dict, edge_idc) not in state_idxs:
+        #             return edge_idc
+        for edge_idc in nx.edge_bfs(self.mz_graph, node):
+            if get_idx_from_idc(self.idc_dict, edge_idc) not in state_idxs:
+                return edge_idc
         return None
 
     def combine_paths_over_pz(self, path0, path1):
