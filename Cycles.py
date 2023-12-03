@@ -186,6 +186,8 @@ class GraphCreator:
         self.entry = (self.m_extended - 1, 0)
         self.exit = (self.m_extended - 1, self.n_extended - 1)
         self.processing_zone = (self.exit[0] + 1, self.exit[1] + 1)
+        self.parking_node = (self.exit[0] + 2, self.exit[1] + 2)
+        self.parking_edge = self.processing_zone, (self.exit[0] + 2, self.exit[1] + 2)
 
         self.exit_edge = (self.exit, (self.exit[0] + 1, self.exit[1] + 1))
         self.entry_edge = ((self.exit[0] + 1, self.exit[1] + 1), (self.entry[0], self.entry[1]))
@@ -194,11 +196,15 @@ class GraphCreator:
         networkx_graph.add_edge(self.exit_edge[0], self.exit_edge[1], edge_type="exit", color="k")
         networkx_graph.add_edge(self.entry_edge[0], self.entry_edge[1], edge_type="entry", color="r")
 
+        # new parking edge
+        networkx_graph.add_node(self.parking_node, node_type="parking_node", color="r")
+        networkx_graph.add_edge(self.parking_edge[0], self.parking_edge[1], edge_type="parking_edge", color="g")
+
     def get_graph(self):
         return self.networkx_graph
 
     # plotting
-    def plot_state(self, ion_moves, labels, plot_ions=True, show_plot=False):
+    def plot_state(self, ion_moves, labels, plot_ions=True, show_plot=False, save_plot=False, filename=""):
         # idc_dict = create_idc_dicitonary(nx_G)
         pos = {(x, y): (y, -x) for i, (x, y) in enumerate(list(self.networkx_graph.nodes()))}
         if plot_ions is True:
@@ -253,15 +259,20 @@ class GraphCreator:
             ion_edge_idc = get_idc_from_idx(self.idc_dict, ion)
             self.networkx_graph.add_edge(ion_edge_idc[0], ion_edge_idc[1], ion_chain="", color=colors[i])
 
-        plt.plot([], [], label=labels)
+        labels0, labels1 = labels
+        plt.plot([], [], label=labels0)
+        plt.plot([], [], label=labels1)
         plt.legend()
 
         if show_plot is True:
             plt.show()
 
+        if save_plot is True:
+            plt.savefig(filename)
+
 
 class MemoryZone:
-    def __init__(self, m, n, v, h, starting_config, starting_sequence, max_timestep, time_pz=1):
+    def __init__(self, m, n, v, h, starting_config, starting_sequence, max_timestep, time_2qubit_gate=1):
         # new graph MZ
         self.mz_Graph_creator = MZGraphCreator(m, n, v, h)
         self.mz_graph = self.mz_Graph_creator.get_graph()
@@ -271,7 +282,7 @@ class MemoryZone:
         self.starting_config = starting_config
         self.starting_sequence = starting_sequence
         self.max_timestep = max_timestep
-        self.time_pz = time_pz
+        self.time_2qubit_gate = time_2qubit_gate
         self.num_ion_chains = len(starting_config)
         self.idc_dict = self.graph_creator.idc_dict
 
@@ -342,6 +353,13 @@ class MemoryZone:
                 self.idc_dict, self.graph_creator.entry_edge
             )
             return next_edge
+
+        # if in parking space
+        if get_idx_from_idc(self.idc_dict, edge_idc) == get_idx_from_idc(
+            self.idc_dict, self.graph_creator.parking_edge
+        ):
+            # move to exit
+            return self.graph_creator.entry_edge
 
         # find shortest path from both sides for all other edges
         path0 = nx.shortest_path(
@@ -535,14 +553,14 @@ class MemoryZone:
     # change: if list in other list -> take longer list, delete other
     # if list can be connected to other list -> combine and delete both
 
-    def rotate(self, full_circle_idx, plot=False):
+    def rotate(self, full_circle_idxs, plot=False):
         # create dictionary of state
         # convert keys to values and vice versa, so one can iterate over the path (positions need to be keys here)
         edge_state_dict = {}
         for ion, edge in self.ion_chains.items():
             edge_state_dict[get_idx_from_idc(self.idc_dict, edge)] = ion
         new_edge_state_dict = {}
-        for edge_bef, edge_aft in pairwise(full_circle_idx):
+        for edge_bef, edge_aft in pairwise(full_circle_idxs):
             try:
                 new_edge_state_dict[edge_aft] = edge_state_dict[edge_bef]
                 del edge_state_dict[edge_bef]

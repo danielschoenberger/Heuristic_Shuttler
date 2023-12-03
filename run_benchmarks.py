@@ -3,11 +3,14 @@ import math
 import random
 import time
 from collections import Counter
+from datetime import datetime
+from pathlib import Path
 
 import networkx as nx
 import numpy as np
 
 from Cycles import GraphCreator, MemoryZone, get_idx_from_idc, get_path_to_node
+from get_sequence import parse_qasm, write_qft_to_file
 
 
 def create_starting_config(perc, graph, seed=None):
@@ -32,19 +35,30 @@ def create_starting_config(perc, graph, seed=None):
     return ion_chains, number_of_registers
 
 
-archs = [[3, 3, 1, 1]]  # [5, 5, 1, 1], [6, 6, 1, 1]]#, [20, 20, 1, 1], [5, 5, 10, 10]]#[5, 5, 1, 1],
-seeds = [2]  # , 2, 3, 4, 5, 6, 7, 8, 9, 10]
-perc = 1.0  # 0.5
+archs = [[3, 3, 1, 1]]  # , [5, 5, 1, 1], [6, 6, 1, 1]]#, [20, 20, 1, 1], [5, 5, 10, 10]]#[5, 5, 1, 1],
+seeds = [2]  # 1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
+perc = 0.5
 results = {}
 cpu_time_results = {}
 start_time_all = time.time()
-
+show_plot = False
+save_plot = True
+# assert either show_plot or save_plot is True, "Either show_plot or save_plot must be True"
+assert not (show_plot and save_plot), "Only one of show_plot or save_plot can be True"
 
 for j, arch in enumerate(archs):
     timestep_arr = []
     cpu_time_arr = []
     for _k, seed in enumerate(seeds):
         start_time = time.time()
+
+        if save_plot:
+            # Create a folder for each run with a timestamp (plot widget)
+            run_folder = Path(f'plots/run_{datetime.now().strftime("%Y%m%d_%H%M%S")}')
+            run_folder.mkdir(parents=True, exist_ok=True)
+        else:
+            run_folder = ""
+
         m, n, v, h = arch
         # create dummy graph
         graph = GraphCreator(m, n, v, h).get_graph()
@@ -54,658 +68,39 @@ for j, arch in enumerate(archs):
 
         ion_chains, number_of_registers = create_starting_config(perc, graph, seed=seed)
 
-        # sequence = [
-        #     0,
-        #     1,
-        #     3,
-        #     2,
-        #     1,
-        #     3,
-        #     2,
-        #     0,
-        #     1,
-        # ]  # TODO no immediately repeating seq elements are possible, e.g. [0, 1, 1, 2]
-        sequence = [
-            0,
-            1,
-            0,
-            2,
-            0,
-            3,
-            0,
-            4,
-            0,
-            5,
-            0,
-            1,
-            2,
-            1,
-            3,
-            1,
-            4,
-            1,
-            5,
-            1,
-            2,
-            3,
-            2,
-            4,
-            2,
-            5,
-            2,
-            3,
-            4,
-            3,
-            5,
-            3,
-            4,
-            5,
-            4,
-            5,
-        ]
-        sequence = [
-            0,
-            1,
-            0,
-            2,
-            0,
-            3,
-            0,
-            4,
-            0,
-            5,
-            0,
-            6,
-            0,
-            7,
-            0,
-            8,
-            0,
-            9,
-            0,
-            10,
-            0,
-            11,
-            0,
-            12,
-            0,
-            13,
-            0,
-            14,
-            0,
-            15,
-            0,
-            16,
-            0,
-            17,
-            0,
-            18,
-            0,
-            19,
-            0,
-            1,
-            2,
-            1,
-            3,
-            1,
-            4,
-            1,
-            5,
-            1,
-            6,
-            1,
-            7,
-            1,
-            8,
-            1,
-            9,
-            1,
-            10,
-            1,
-            11,
-            1,
-            12,
-            1,
-            13,
-            1,
-            14,
-            1,
-            15,
-            1,
-            16,
-            1,
-            17,
-            1,
-            18,
-            1,
-            19,
-            1,
-            2,
-            3,
-            2,
-            4,
-            2,
-            5,
-            2,
-            6,
-            2,
-            7,
-            2,
-            8,
-            2,
-            9,
-            2,
-            10,
-            2,
-            11,
-            2,
-            12,
-            2,
-            13,
-            2,
-            14,
-            2,
-            15,
-            2,
-            16,
-            2,
-            17,
-            2,
-            18,
-            2,
-            19,
-            2,
-            3,
-            4,
-            3,
-            5,
-            3,
-            6,
-            3,
-            7,
-            3,
-            8,
-            3,
-            9,
-            3,
-            10,
-            3,
-            11,
-            3,
-            12,
-            3,
-            13,
-            3,
-            14,
-            3,
-            15,
-            3,
-            16,
-            3,
-            17,
-            3,
-            18,
-            3,
-            19,
-            3,
-            4,
-            5,
-            4,
-            6,
-            4,
-            7,
-            4,
-            8,
-            4,
-            9,
-            4,
-            10,
-            4,
-            11,
-            4,
-            12,
-            4,
-            13,
-            4,
-            14,
-            4,
-            15,
-            4,
-            16,
-            4,
-            17,
-            4,
-            18,
-            4,
-            19,
-            4,
-            5,
-            6,
-            5,
-            7,
-            5,
-            8,
-            5,
-            9,
-            5,
-            10,
-            5,
-            11,
-            5,
-            12,
-            5,
-            13,
-            5,
-            14,
-            5,
-            15,
-            5,
-            16,
-            5,
-            17,
-            5,
-            18,
-            5,
-            19,
-            5,
-            6,
-            7,
-            6,
-            8,
-            6,
-            9,
-            6,
-            10,
-            6,
-            11,
-            6,
-            12,
-            6,
-            13,
-            6,
-            14,
-            6,
-            15,
-            6,
-            16,
-            6,
-            17,
-            6,
-            18,
-            6,
-            19,
-            6,
-            7,
-            8,
-            7,
-            9,
-            7,
-            10,
-            7,
-            11,
-            7,
-            12,
-            7,
-            13,
-            7,
-            14,
-            7,
-            15,
-            7,
-            16,
-            7,
-            17,
-            7,
-            18,
-            7,
-            19,
-            7,
-            8,
-            9,
-            8,
-            10,
-            8,
-            11,
-            8,
-            12,
-            8,
-            13,
-            8,
-            14,
-            8,
-            15,
-            8,
-            16,
-            8,
-            17,
-            8,
-            18,
-            8,
-            19,
-            8,
-            9,
-            10,
-            9,
-            11,
-            9,
-            12,
-            9,
-            13,
-            9,
-            14,
-            9,
-            15,
-            9,
-            16,
-            9,
-            17,
-            9,
-            18,
-            9,
-            19,
-            9,
-            10,
-            11,
-            10,
-            12,
-            10,
-            13,
-            10,
-            14,
-            10,
-            15,
-            10,
-            16,
-            10,
-            17,
-            10,
-            18,
-            10,
-            19,
-            10,
-            11,
-            12,
-            11,
-            13,
-            11,
-            14,
-            11,
-            15,
-            11,
-            16,
-            11,
-            17,
-            11,
-            18,
-            11,
-            19,
-            11,
-            12,
-            13,
-            12,
-            14,
-            12,
-            15,
-            12,
-            16,
-            12,
-            17,
-            12,
-            18,
-            12,
-            19,
-            12,
-            13,
-            14,
-            13,
-            15,
-            13,
-            16,
-            13,
-            17,
-            13,
-            18,
-            13,
-            19,
-            13,
-            14,
-            15,
-            14,
-            16,
-            14,
-            17,
-            14,
-            18,
-            14,
-            19,
-            14,
-            15,
-            16,
-            15,
-            17,
-            15,
-            18,
-            15,
-            19,
-            15,
-            16,
-            17,
-            16,
-            18,
-            16,
-            19,
-            16,
-            17,
-            18,
-            17,
-            19,
-            17,
-            18,
-            19,
-            18,
-            19,
-        ]
+        # generate sequence and two-qubit sequence
+        N = number_of_registers
+        filename = "QASM_files/qft_%squbits.qasm" % N
+        # /Users/danielschonberger/Desktop/Heuristic_Github/
+        write_qft_to_file(N, filename)
+        print(f"QFT for {N} qubits written to {filename}\n")
 
-        sequence = list(range(number_of_registers))
+        seq = parse_qasm(filename)
+        flat_seq = [item for sublist in seq for item in sublist]
+        # change last 3 seq elements
+        seq = seq[:-3] + [(4, 5), (5,)]
+        print(seq)
+
+        two_qubit_seq = []
+        i = 0
+        s = 0
+        while i < len(seq):
+            if len(seq[i]) == 2:
+                two_qubit_seq.append(i + s)
+                s += 1
+            i += 1
+
+        # TODO no immediately repeating seq elements are possible, e.g. [0, 1, 1, 2]
+        sequence = flat_seq  # [0, 1, 0, 2, 0, 3, 0, 4]
+        # sequence = list(range(number_of_registers))
 
         # chain in entry is first sequence element at the start
         chain_in_entry = sequence[0]
 
         # # 2-qubit sequence -> [2] means, that the 3rd ion in the sequence (ion with id 2) is a 2-qubit gate
-        # two_qubit_sequence = [
-        #     1,
-        #     3,
-        #     5,
-        #     7,
-        #     9,
-        #     11,
-        #     13,
-        #     15,
-        #     17,
-        #     19,
-        #     21,
-        #     23,
-        #     25,
-        #     27,
-        #     29,
-        #     31,
-        #     33,
-        #     35,
-        #     37,
-        #     40,
-        #     42,
-        #     44,
-        #     46,
-        #     48,
-        #     50,
-        #     52,
-        #     54,
-        #     56,
-        #     58,
-        #     60,
-        #     62,
-        #     64,
-        #     66,
-        #     68,
-        #     70,
-        #     72,
-        #     74,
-        #     77,
-        #     79,
-        #     81,
-        #     83,
-        #     85,
-        #     87,
-        #     89,
-        #     91,
-        #     93,
-        #     95,
-        #     97,
-        #     99,
-        #     101,
-        #     103,
-        #     105,
-        #     107,
-        #     109,
-        #     112,
-        #     114,
-        #     116,
-        #     118,
-        #     120,
-        #     122,
-        #     124,
-        #     126,
-        #     128,
-        #     130,
-        #     132,
-        #     134,
-        #     136,
-        #     138,
-        #     140,
-        #     142,
-        #     145,
-        #     147,
-        #     149,
-        #     151,
-        #     153,
-        #     155,
-        #     157,
-        #     159,
-        #     161,
-        #     163,
-        #     165,
-        #     167,
-        #     169,
-        #     171,
-        #     173,
-        #     176,
-        #     178,
-        #     180,
-        #     182,
-        #     184,
-        #     186,
-        #     188,
-        #     190,
-        #     192,
-        #     194,
-        #     196,
-        #     198,
-        #     200,
-        #     202,
-        #     205,
-        #     207,
-        #     209,
-        #     211,
-        #     213,
-        #     215,
-        #     217,
-        #     219,
-        #     221,
-        #     223,
-        #     225,
-        #     227,
-        #     229,
-        #     232,
-        #     234,
-        #     236,
-        #     238,
-        #     240,
-        #     242,
-        #     244,
-        #     246,
-        #     248,
-        #     250,
-        #     252,
-        #     254,
-        #     257,
-        #     259,
-        #     261,
-        #     263,
-        #     265,
-        #     267,
-        #     269,
-        #     271,
-        #     273,
-        #     275,
-        #     277,
-        #     280,
-        #     282,
-        #     284,
-        #     286,
-        #     288,
-        #     290,
-        #     292,
-        #     294,
-        #     296,
-        #     298,
-        #     301,
-        #     303,
-        #     305,
-        #     307,
-        #     309,
-        #     311,
-        #     313,
-        #     315,
-        #     317,
-        #     320,
-        #     322,
-        #     324,
-        #     326,
-        #     328,
-        #     330,
-        #     332,
-        #     334,
-        #     337,
-        #     339,
-        #     341,
-        #     343,
-        #     345,
-        #     347,
-        #     349,
-        #     352,
-        #     354,
-        #     356,
-        #     358,
-        #     360,
-        #     362,
-        #     365,
-        #     367,
-        #     369,
-        #     371,
-        #     373,
-        #     376,
-        #     378,
-        #     380,
-        #     382,
-        #     385,
-        #     387,
-        #     389,
-        #     392,
-        #     394,
-        #     397,
-        # ]  # [0, 2, 4, 6]
+        # two_qubit_sequence = [0, 2, 4, 6]
         # # two_qubit_sequence = [1, 2, 3, 4, 5, 7, 8, 9, 10, 12, 13, 14, 16, 17, 19]
-        two_qubit_sequence = []
+        two_qubit_sequence = two_qubit_seq  # [1, 3, 5, 7, 9, 12, 14, 16, 18, 21, 23, 25, 28, 30, 33]#[]
         two_qubit_sequence.append(
             -1
         )  # -1 at the end, so two-qubit sequence is not empty after all 2-qubit gates have been processed
@@ -724,22 +119,32 @@ for j, arch in enumerate(archs):
 
         print(f"arch: {arch}, seed: {seed}, registers: {number_of_registers}\n")
         max_timesteps = 50000
-        time_pz = 2
+        # time_2qubit_gate only works for 2-qubit gates -> need also for 1-qubit gates
+        time_2qubit_gate = 3
 
-        Mem1 = MemoryZone(m, n, v, h, ion_chains, sequence, max_timesteps, time_pz=time_pz)
+        Mem1 = MemoryZone(m, n, v, h, ion_chains, sequence, max_timesteps, time_2qubit_gate=time_2qubit_gate)
         timestep = 0
         print("time step: %s" % timestep)
+
+        # Save the current plot with a meaningful filename (plot widget)
+        plot_filename = Path(run_folder) / f"plot_{1:03d}.png"
+
         Mem1.graph_creator.plot_state(
             [get_idx_from_idc(Mem1.idc_dict, edge_idc) for edge_idc in Mem1.ion_chains.values()],
-            labels=timestep,
-            show_plot=True,
+            labels=[
+                "time step %s" % timestep,
+                "next 3 seq elem: %s" % seq[seq_element_counter : seq_element_counter + 3],
+            ],
+            show_plot=show_plot,
+            save_plot=save_plot,
+            filename=[plot_filename if save_plot else None][0],
         )
 
         seq_ion_was_at_entry = 0
         next_seq_ion_in_exit = 0
 
         seq_ion_was_at_entry = False
-        timestep = 1
+        # timestep = 1
         while timestep < max_timesteps:
             ########### PREPROCESSING ###########
             ### move all chains until they need to rotate because they are at a junction (move if path is free and not at a junction)
@@ -759,8 +164,9 @@ for j, arch in enumerate(archs):
                         Mem1.ion_chains[rotate_chain] = next_edge
                     else:
                         need_rotate[i] = True
+            print(state_edges_idx, "s", Mem1.ion_chains)
             print("time step: %s, moved all chains as far as possible" % timestep)
-            print(sequence)
+            print("sequence: ", sequence)
             # Mem1.graph_creator.plot_state([get_idx_from_idc(Mem1.idc_dict, edge_idc) for edge_idc in Mem1.ion_chains.values()], show_plot=False)
             # plt.show()
 
@@ -769,12 +175,17 @@ for j, arch in enumerate(archs):
             path_length_sequence = {}
             move_sequence = []
             for i, rotate_chain in enumerate(unique_sequence):
-                # if 2-qubit gate -> check if second ion is in exit
+                # if 2-qubit gate -> check if second ion is in exit or in parking edge
+                # maybe not in parking edge -> move to exit from parking edge to do 2 qubit gate?
                 if (
                     seq_element_counter == two_qubit_sequence[0]
                     and rotate_chain == sequence[1]
-                    and get_idx_from_idc(Mem1.idc_dict, Mem1.ion_chains[rotate_chain])
-                    == get_idx_from_idc(Mem1.idc_dict, Mem1.graph_creator.exit_edge)
+                    and (
+                        get_idx_from_idc(Mem1.idc_dict, Mem1.ion_chains[rotate_chain])
+                        == get_idx_from_idc(Mem1.idc_dict, Mem1.graph_creator.exit_edge)
+                        or get_idx_from_idc(Mem1.idc_dict, Mem1.ion_chains[rotate_chain])
+                        == get_idx_from_idc(Mem1.idc_dict, Mem1.graph_creator.parking_edge)
+                    )
                 ):
                     next_seq_ion_in_exit += 1
 
@@ -824,7 +235,7 @@ for j, arch in enumerate(archs):
                     or (
                         rotate_chain in sequence[1:2]
                         and seq_element_counter == two_qubit_sequence[0]
-                        and next_seq_ion_in_exit < Mem1.time_pz
+                        and next_seq_ion_in_exit < Mem1.time_2qubit_gate
                     )
                 ):
                     # problem fixed with extra if clause at the end of "move into exit" below (QFT specific)
@@ -864,8 +275,20 @@ for j, arch in enumerate(archs):
                 if not Mem1.check_if_edge_is_filled(next_edge):
                     all_circles[rotate_chain] = [edge_idc, next_edge]
 
-                    # for two-qubit gates: leave ion in entry until gate is processed (other ion was in exit long enough)
+                    # new try
+                    # if rotate_chain == sequence[0] and get_idx_from_idc(Mem1.idc_dict, edge_idc) == get_idx_from_idc(
+                    # Mem1.idc_dict, Mem1.graph_creator.entry_edge
+                    # ):
+                    #     all_circles[rotate_chain] = [edge_idc, Mem1.graph_creator.parking_edge]
+                    #     continue
 
+                    # new park logic
+                    if rotate_chain in sequence[1:3] and get_idx_from_idc(Mem1.idc_dict, edge_idc) == get_idx_from_idc(
+                        Mem1.idc_dict, Mem1.graph_creator.entry_edge
+                    ):
+                        all_circles[rotate_chain] = [edge_idc, Mem1.graph_creator.parking_edge]
+
+                    # for two-qubit gates: leave ion in entry until gate is processed (other ion was in exit long enough)
                     # entry
                     # if 2-qubit gate and in entry -> need to wait even if next edge is free
                     print("\nnext edge free")
@@ -876,7 +299,7 @@ for j, arch in enumerate(archs):
                         == get_idx_from_idc(Mem1.idc_dict, Mem1.graph_creator.entry_edge)
                         and seq_element_counter == two_qubit_sequence[0]
                     ):
-                        if next_seq_ion_in_exit < Mem1.time_pz:
+                        if next_seq_ion_in_exit < Mem1.time_2qubit_gate:
                             all_circles[rotate_chain] = [edge_idc, edge_idc]
                         else:
                             next_seq_ion_in_exit = 0
@@ -914,12 +337,13 @@ for j, arch in enumerate(archs):
                         path = [*path1, (top_left_free_edge_idc[1], top_left_free_edge_idc[0])]
 
                     all_circles[rotate_chain] = [edge_idc, next_edge, *path]
+
                     assert next_edge == (Mem1.graph_creator.exit, Mem1.graph_creator.processing_zone)
 
                     # extra clause needed, because if first ion of 2 qubit gate moves out of pz -> path length is 0 in move seq -> doesn't block third ion to enter, even though first ion of 2 qubit gate is needed immediately again (QFT)
                     # summary: only enters pz if it is the next or next next in sequence (only two ions in pz)
-                    if rotate_chain not in sequence[:2]:
-                        all_circles[rotate_chain] = [edge_idc, edge_idc]
+                    # if rotate_chain not in sequence[:2]:
+                    #    all_circles[rotate_chain] = [edge_idc, edge_idc]
 
                 ### move into entry (if next edge is entry)
                 elif get_idx_from_idc(Mem1.idc_dict, next_edge) == get_idx_from_idc(
@@ -936,7 +360,8 @@ for j, arch in enumerate(archs):
                         Mem1.graph_creator.processing_zone,
                         top_left_free_edge_idc[0],
                         exclude_exit=True,
-                        exclude_entry=False,
+                        exclude_entry=False
+                        # exclude=Mem1.ion_chains[
                     )
                     path1 = get_path_to_node(
                         Mem1.graph,
@@ -954,10 +379,21 @@ for j, arch in enumerate(archs):
 
                     all_circles[rotate_chain] = [edge_idc, *path]
 
+                    # new move out of parking logic
+                    if get_idx_from_idc(Mem1.idc_dict, edge_idc) == get_idx_from_idc(
+                        Mem1.idc_dict, Mem1.graph_creator.parking_edge
+                    ):
+                        all_circles[rotate_chain] = [edge_idc, next_edge]
+
                 ### move out of entry (if edge is entry)
                 elif get_idx_from_idc(Mem1.idc_dict, edge_idc) == get_idx_from_idc(
                     Mem1.idc_dict, Mem1.graph_creator.entry_edge
                 ):
+                    # new try
+                    # if rotate_chain == sequence[0]:
+                    #     all_circles[rotate_chain] = [edge_idc, Mem1.graph_creator.parking_edge]
+                    #     continue
+
                     # same logic as for entry edge above
                     if (
                         rotate_chain in sequence[1:]
@@ -989,13 +425,19 @@ for j, arch in enumerate(archs):
 
                     all_circles[rotate_chain] = path
 
+                    # new park logic
+                    if rotate_chain in sequence[1:3] and get_idx_from_idc(Mem1.idc_dict, edge_idc) == get_idx_from_idc(
+                        Mem1.idc_dict, Mem1.graph_creator.entry_edge
+                    ):
+                        all_circles[rotate_chain] = [edge_idc, Mem1.graph_creator.parking_edge]
+
                     # if 2-qubit gate and in entry -> need to wait
                     print("\npath through pz")
                     print("seq_element_counter: %s" % seq_element_counter)
                     print("two_qubit_sequence: %s" % two_qubit_sequence)
                     print("next_seq_ion_in_exit: %s" % next_seq_ion_in_exit, "\n")
                     if seq_element_counter == two_qubit_sequence[0]:
-                        if next_seq_ion_in_exit < Mem1.time_pz:
+                        if next_seq_ion_in_exit < Mem1.time_2qubit_gate:
                             all_circles[rotate_chain] = [edge_idc, edge_idc]
                         else:
                             next_seq_ion_in_exit = 0
@@ -1020,13 +462,35 @@ for j, arch in enumerate(archs):
             for circle in all_circles_keys:
                 inner_if_broken = False  # flag to track inner if clause break
                 for edge in all_circles[circle]:
-                    if Mem1.graph_creator.processing_zone in edge:
+                    # if processing zone is in circle -> combine and delete circles (if length <=2 -> was a free edge <- Update: still need it for first circle)
+                    if Mem1.graph_creator.processing_zone in edge:  # and len(all_circles[circle]) > 2:
+                        # check if it is the first circle in pz -> else continue with combining
                         if first_circle == -1:
                             first_circle = circle
                             inner_if_broken = True
                             break
+                        # combine and delete
                         else:
-                            if all(edge in all_circles[circle] for edge in all_circles[first_circle]):
+                            # if first circle is move from parking to entry + second circle is move from exit to entry
+                            # -> delete second circle, so that first circle can move to entry and out of parking
+                            if get_idx_from_idc(Mem1.idc_dict, Mem1.graph_creator.parking_edge) in [
+                                get_idx_from_idc(Mem1.idc_dict, edge) for edge in all_circles[first_circle]
+                            ] and get_idx_from_idc(Mem1.idc_dict, Mem1.graph_creator.entry_edge) in [
+                                get_idx_from_idc(Mem1.idc_dict, edge) for edge in all_circles[circle]
+                            ]:
+                                del all_circles[circle]
+                                move_sequence.remove(circle)
+
+                            # already combines that correctly?
+                            # if Mem1.graph_creator.parking_node in edge:
+                            #     print('parking: ', all_circles[first_circle], all_circles[circle])
+                            #     assert get_idx_from_idc(Mem1.idc_dict, all_circles[first_circle][0]) == get_idx_from_idc(Mem1.idc_dict, Mem1.graph_creator.entry_edge), "first circle is not starting from entry edge"
+                            #     print(Mem1.combine_paths_over_pz(
+                            #         all_circles[first_circle], all_circles[circle]
+                            #     ))
+
+                            # check if all edges of first circle are in second circle -> then first circle is now second circle
+                            elif all(edge in all_circles[circle] for edge in all_circles[first_circle]):
                                 # check if a "wait" move (edge, edge) is in first circle -> happens for 2-qubit gates in entry (ion in entry waits) -> don't combine circles
                                 counter_first_circle = Counter(all_circles[first_circle])
                                 if 2 in counter_first_circle.values():
@@ -1034,11 +498,13 @@ for j, arch in enumerate(archs):
                                 all_circles[first_circle] = all_circles[circle].copy()
                                 del all_circles[circle]
                                 move_sequence.remove(circle)
+                            # check if all edges of second circle are in first circle -> delete second circle
                             elif all(edge in all_circles[first_circle] for edge in all_circles[circle]):
                                 counter_first_circle = Counter(all_circles[first_circle])
                                 del all_circles[circle]  # always delete circle and keep first circle (priority queue)
                                 move_sequence.remove(circle)
                             else:
+                                # if already parking edge in circle -> don't combine? and delete third circle?
                                 all_circles[first_circle] = Mem1.combine_paths_over_pz(
                                     all_circles[first_circle], all_circles[circle]
                                 )
@@ -1070,22 +536,27 @@ for j, arch in enumerate(archs):
                     get_idx_from_idc(Mem1.idc_dict, edge_idc) for edge_idc in all_circles[seq_idx]
                 ]
                 # rotate chains
-                print("seq_idx", seq_idx)
+                print("rotate seq_idx", seq_idx)
                 Mem1.rotate(free_circle_idxs[seq_idx])
 
             timestep += 1
             print("new timestep: %s" % timestep)
-            # if timestep > 169:
+
+            # Save the current plot with a meaningful filename (plot widget)
+            plot_filename = Path(run_folder) / f"plot_{timestep:03d}.png"
+            print(sequence, "seq_element_counter", seq_element_counter)
             Mem1.graph_creator.plot_state(
                 [get_idx_from_idc(Mem1.idc_dict, edge_idc) for edge_idc in Mem1.ion_chains.values()],
-                str(timestep),
-                show_plot=True,
+                labels=["time step %s" % timestep, "next seq elem: %s" % sequence[0]],
+                show_plot=show_plot,
+                save_plot=save_plot,
+                filename=[plot_filename if save_plot else None][0],
             )
 
             # if seq ion was at entry last timestep -> is now back in memory -> remove from sequence
             if seq_ion_was_at_entry is True:
                 # seq_ion_was_at_entry is only True if seq ion is now not in entry anymore (for 2-qubit gates it has to wait in entry):
-                if seq_element_counter == two_qubit_sequence[0] and next_seq_ion_in_exit < Mem1.time_pz:
+                if seq_element_counter == two_qubit_sequence[0] and next_seq_ion_in_exit < Mem1.time_2qubit_gate:
                     pass
                 else:
                     if len(sequence) == 1:
@@ -1119,8 +590,10 @@ print("results: \n", results)
 print("cpu time results: \n", cpu_time_results)
 print("time all: \n", time.time() - start_time_all)
 
-# TODO Schalter
-# TODO cut sequence? Unique sequence reasonable?
+
 # TODO repeating sequence elements
+
+# 17.11.23
+# two chains park at the end + 5 is exiting for last gate even though it could just stay
 
 # e.g. time step 50 -> 0 goes out of entry towards top left (but only because free edge is in second row from bottom -> was correctly searched from exit, but lowest row is full on the left side -> should search at bottom be bfs?)
