@@ -593,7 +593,4 @@ print("time all: \n", time.time() - start_time_all)
 
 # TODO repeating sequence elements
 
-# 17.11.23
-# two chains park at the end + 5 is exiting for last gate even though it could just stay
-
 # e.g. time step 50 -> 0 goes out of entry towards top left (but only because free edge is in second row from bottom -> was correctly searched from exit, but lowest row is full on the left side -> should search at bottom be bfs?)
