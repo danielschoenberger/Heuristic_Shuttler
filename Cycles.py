@@ -138,6 +138,11 @@ class GraphCreator:
         self.networkx_graph = self.create_graph()
 
         self.idc_dict = create_idc_dictionary(self.networkx_graph)
+        self.pz_edges_idx = [
+            get_idx_from_idc(self.idc_dict, edge)
+            for edge in self.networkx_graph.edges()
+            if nx.get_edge_attributes(self.networkx_graph, "edge_type")[edge] != "trap"
+        ]
 
     def create_graph(self):
         self.m_extended = self.m + (self.ion_chain_size_vertical - 1) * (self.m - 1)
@@ -220,7 +225,7 @@ class GraphCreator:
             # color all edges black
             self.networkx_graph.add_edge(edge_idc[0], edge_idc[1], color="k")
 
-            ion_holder = []
+            ion_holder = {}
             colors = []
             np.random.seed(0)
             for _ in range(len(ion_moves)):
@@ -231,10 +236,17 @@ class GraphCreator:
                 colors.append((r, g, b))
             np.random.seed()
 
-            for i, ion in enumerate(ion_moves):
-                ion_edge_idc = get_idc_from_idx(self.idc_dict, ion)
-                ion_holder.append(i)
-                self.networkx_graph.add_edge(ion_edge_idc[0], ion_edge_idc[1], ion_chain=ion_holder[i], color=colors[i])
+            for i, ion_place in enumerate(ion_moves):
+                ion_edge_idc = get_idc_from_idx(self.idc_dict, ion_place)
+                try:
+                    ion_holder[ion_place].append(i)
+                except KeyError:
+                    ion_holder[ion_place] = [i]
+            for i, ion_place in enumerate(ion_moves):
+                ion_edge_idc = get_idc_from_idx(self.idc_dict, ion_place)
+                self.networkx_graph.add_edge(
+                    ion_edge_idc[0], ion_edge_idc[1], ion_chain=ion_holder[ion_place], color=colors[i]
+                )
 
         edge_color = nx.get_edge_attributes(self.networkx_graph, "color").values()
         node_color = list(nx.get_node_attributes(self.networkx_graph, "color").values())
@@ -323,15 +335,25 @@ class MemoryZone:
         ion_chains_idx = []
         for chain in self.ion_chains.values():
             ion_chains_idx.append(get_idx_from_idc(self.idc_dict, chain))
-
+        self.state_idxs = ion_chains_idx
         return ion_chains_idx
+
+    def count_chains_in_pz(self):
+        return len([chain_idx for chain_idx in self.get_state_idxs() if chain_idx in self.graph_creator.pz_edges_idx])
+
+    def find_chains_in_parking_edge(self):
+        return [
+            ion
+            for ion, chain_idx in enumerate(self.get_state_idxs())
+            if chain_idx == get_idx_from_idc(self.idc_dict, self.graph_creator.parking_edge)
+        ]
 
     def find_next_edge(self, edge_idc, towards=(0, 0)):
         ### find next edge given edge_idc of ion chain
 
         # if in exit or entry -> move through processing zone
-        if get_idx_from_idc(self.idc_dict, edge_idc) == get_idx_from_idc(self.idc_dict, self.graph_creator.exit_edge):
-            return self.graph_creator.entry_edge
+        # if get_idx_from_idc(self.idc_dict, edge_idc) == get_idx_from_idc(self.idc_dict, self.graph_creator.exit_edge):
+        #    return self.graph_creator.entry_edge
         if get_idx_from_idc(self.idc_dict, edge_idc) == get_idx_from_idc(self.idc_dict, self.graph_creator.entry_edge):
             if towards == (0, 0):
                 next_edge = next(
@@ -359,19 +381,20 @@ class MemoryZone:
             self.idc_dict, self.graph_creator.parking_edge
         ):
             # move to exit
-            return self.graph_creator.entry_edge
+            # return self.graph_creator.entry_edge
+            return self.graph_creator.parking_edge
 
         # find shortest path from both sides for all other edges
         path0 = nx.shortest_path(
             self.graph,
             edge_idc[0],
-            self.graph_creator.processing_zone,
+            self.graph_creator.parking_node,
             lambda _, __, edge_attr_dict: (edge_attr_dict["edge_type"] == "entry") * 1e8 + 1,
         )
         path1 = nx.shortest_path(
             self.graph,
             edge_idc[1],
-            self.graph_creator.processing_zone,
+            self.graph_creator.parking_node,
             lambda _, __, edge_attr_dict: (edge_attr_dict["edge_type"] == "entry") * 1e8 + 1,
         )
 
@@ -393,8 +416,8 @@ class MemoryZone:
         # Find the common node shared between the two edges
         common_node = set(edge1).intersection(set(edge2))
 
-        if len(common_node) != 1:
-            msg = "The input edges are not connected."
+        if len(common_node) != 1 and edge1 != edge2:
+            msg = f"The input edges are not connected. Edges: {edge1}, {edge2}"
             raise ValueError(msg)
 
         common_node = common_node.pop()
@@ -404,6 +427,10 @@ class MemoryZone:
         else:
             edge1_in_order = (edge1[0], common_node)
             edge2_in_order = (common_node, edge2[1]) if edge2[0] == common_node else (common_node, edge2[0])
+
+        # new if same edge twice don't change order
+        if get_idx_from_idc(self.idc_dict, edge1_in_order) == get_idx_from_idc(self.idc_dict, edge2_in_order):
+            edge2_in_order = edge1_in_order
 
         return edge1_in_order, edge2_in_order
 
@@ -422,6 +449,60 @@ class MemoryZone:
         common_junction_nodes = nodes_edge1.intersection(nodes_edge2).intersection(all_junctions)
 
         return len(common_junction_nodes) == 1
+
+    def new_create_outer_circle(self, edge_idc, next_edge, towards=(0, 0)):
+        # move from exit -> move to parking space
+        if get_idx_from_idc(self.idc_dict, edge_idc) == get_idx_from_idc(self.idc_dict, self.graph_creator.exit_edge):
+            assert next_edge == self.graph_creator.parking_edge
+            return (edge_idc, next_edge)
+        # move to exit -> move to exit + move to parking space
+        if get_idc_from_idx(self.idc_dict, get_idx_from_idc(self.idc_dict, next_edge)) == self.graph_creator.exit_edge:
+            return (edge_idc, next_edge, self.graph_creator.parking_edge)
+        # move from entry to memory zone
+        if get_idx_from_idc(self.idc_dict, edge_idc) == get_idx_from_idc(self.idc_dict, self.graph_creator.entry_edge):
+            target_edge = self.bfs_free_edge(towards)
+            # calc path to target edge
+            path0 = get_path_to_node(
+                self.graph,
+                self.graph_creator.processing_zone,
+                target_edge[0],
+                exclude_exit=True,
+                exclude_entry=False,
+            )
+            path1 = get_path_to_node(
+                self.graph,
+                self.graph_creator.processing_zone,
+                target_edge[1],
+                exclude_exit=True,
+                exclude_entry=False,
+            )
+            if len(path1) > len(path0):
+                edge_path = [*path0, (target_edge[0], target_edge[1])]
+            else:
+                edge_path = [*path1, (target_edge[1], target_edge[0])]
+            return edge_path
+
+        # circles within memory zone
+
+        node_path = nx.shortest_path(
+            self.graph,
+            next_edge[1],
+            edge_idc[0],
+            lambda node0, node1, _: [
+                1e8
+                if (
+                    get_idx_from_idc(self.idc_dict, (node0, node1)) == get_idx_from_idc(self.idc_dict, edge_idc)
+                    or get_idx_from_idc(self.idc_dict, (node0, node1)) == get_idx_from_idc(self.idc_dict, next_edge)
+                    or get_idx_from_idc(self.idc_dict, (node0, node1))
+                    == get_idx_from_idc(self.idc_dict, self.graph_creator.entry_edge)
+                )
+                else 1
+            ][0],
+        )
+        edge_path = []
+        for edge in pairwise(node_path):
+            edge_path.append(edge)
+        return [edge_idc, next_edge, *edge_path, edge_idc]
 
     def create_outer_circle(self, edge_idc, next_edge, path_over_pz=False, include_path_to_exit_edge=True):
         # make sure that edge_idc and next_edge are connected and in correct order
@@ -489,29 +570,36 @@ class MemoryZone:
         return edge_path
 
     def check_if_edge_is_filled(self, edge_idc):
-        state_idxs = self.get_state_idxs()
-        return get_idx_from_idc(self.idc_dict, edge_idc) in state_idxs
+        return get_idx_from_idc(self.idc_dict, edge_idc) in self.state_idxs
 
     def find_nonfree_and_free_circle_idxs(self, circles_dict):
+        # careful! If only two edges -> second edge must always be free! (could also be parking edge, because PE can store multiple)
         junction_nodes = [*self.junction_nodes, self.graph_creator.processing_zone]
         combinations_of_circles = list(distinct_combinations(circles_dict.keys(), 2))
 
         def get_circle_nodes(circle):
             # if next edge is free -> circle is just two edges -> can skip first and last node
             if len(circles_dict[circle]) == 2:
+                print("circle", circle, "circles_dict[circle]", circles_dict[circle])
                 if circles_dict[circle][0] != circles_dict[circle][1]:
                     circle_or_path = [(circles_dict[circle][0][1], circles_dict[circle][1][0])]
-                else:  # else if path is same edge twice skip completely
+                # new if same edge twice is parking edge -> skip completely
+                elif get_idx_from_idc(self.idc_dict, circles_dict[circle][0]) == get_idx_from_idc(
+                    self.idc_dict, self.graph_creator.parking_edge
+                ):
+                    circle_or_path = []
+                else:  # else if path is same edge twice skip (but of course keep first node -> no movement into this edge)
                     circle_or_path = [(circles_dict[circle][0][0], circles_dict[circle][0][0])]
             # if circle is real circle -> need to check all nodes
             elif circles_dict[circle][0] == circles_dict[circle][-1]:
                 circle_or_path = circles_dict[circle]
             # if circle is only a path -> can skip first and last node
+            # extra clause for when there is a stop at the end? -> if last two edges are same -> skip last two edges?
             elif circles_dict[circle][-1] == circles_dict[circle][-2]:
                 circle_or_path = circles_dict[circle][1:-2]
             else:
                 circle_or_path = circles_dict[circle][1:-1]
-
+            print("circle", circle, "circle_or_path", circle_or_path, circles_dict[circle])
             nodes = set()
             for edge in circle_or_path:
                 node1, node2 = edge
@@ -526,11 +614,24 @@ class MemoryZone:
         for circle1, circle2 in combinations_of_circles:
             nodes1 = get_circle_nodes(circle1)
             nodes2 = get_circle_nodes(circle2)
-            if len(nodes1.intersection(nodes2).intersection(junction_nodes)) > 0 or (
-                get_idx_from_idc(self.idc_dict, circles_dict[circle1][-1])
-                == (get_idx_from_idc(self.idc_dict, circles_dict[circle2][-1]))
+            if (
+                len(nodes1) != 0
+                and len(nodes2) != 0
+                and get_idx_from_idc(self.idc_dict, circles_dict[circle1][-1])
+                != get_idx_from_idc(self.idc_dict, self.graph_creator.parking_edge)
             ):
+                assert get_idx_from_idc(self.idc_dict, circles_dict[circle1][-1]) != (
+                    get_idx_from_idc(self.idc_dict, circles_dict[circle2][-1])
+                ), "circles end in same edge, was in if statement below as: or (get_idx_from_idc(self.idc_dict, circles_dict[circle1][-1]) == (get_idx_from_idc(self.idc_dict, circles_dict[circle2][-1]))), {}, {}".format(
+                    circle1, circle2
+                )
+            # new: exclude processing zone node -> if pz node in circles -> can both be executed (TODO check again for moves out of pz)
+            if len(
+                nodes1.intersection(nodes2).intersection(junction_nodes)
+            ) > 0 and self.graph_creator.processing_zone not in nodes1.intersection(nodes2):
                 junction_shared_pairs.append((circle1, circle2))
+
+        print("junction_shared_pairs", junction_shared_pairs)
 
         free_circle_combs = [
             circle_idx_pair
@@ -559,6 +660,7 @@ class MemoryZone:
         edge_state_dict = {}
         for ion, edge in self.ion_chains.items():
             edge_state_dict[get_idx_from_idc(self.idc_dict, edge)] = ion
+        print("edge_state_dict", edge_state_dict)
         new_edge_state_dict = {}
         for edge_bef, edge_aft in pairwise(full_circle_idxs):
             try:
@@ -566,6 +668,7 @@ class MemoryZone:
                 del edge_state_dict[edge_bef]
             except KeyError:
                 continue
+        print("new_edge_state_dict", new_edge_state_dict)
 
         # change ion chains
         for idx, ion in new_edge_state_dict.items():
@@ -622,3 +725,12 @@ class MemoryZone:
             self.graph, path1[0][0], self.graph_creator.processing_zone, exclude_entry=False, exclude_exit=False
         )
         return path_to_pz + path_from_pz
+
+    def find_least_import_chain_in_pz(self, seq, ions_in_pz):
+        for num in seq:
+            if num in ions_in_pz:
+                ions_in_pz.remove(num)
+                if len(ions_in_pz) == 1:
+                    return ions_in_pz[0]
+                print(ions_in_pz)
+        return ions_in_pz[-1]
