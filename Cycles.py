@@ -284,7 +284,9 @@ class GraphCreator:
 
 
 class MemoryZone:
-    def __init__(self, m, n, v, h, starting_config, starting_sequence, max_timestep, time_2qubit_gate=1):
+    def __init__(
+        self, m, n, v, h, starting_config, starting_sequence, max_timestep, max_num_parking, time_2qubit_gate=1
+    ):
         # new graph MZ
         self.mz_Graph_creator = MZGraphCreator(m, n, v, h)
         self.mz_graph = self.mz_Graph_creator.get_graph()
@@ -294,6 +296,7 @@ class MemoryZone:
         self.starting_config = starting_config
         self.starting_sequence = starting_sequence
         self.max_timestep = max_timestep
+        self.max_num_parking = max_num_parking
         self.time_2qubit_gate = time_2qubit_gate
         self.num_ion_chains = len(starting_config)
         self.idc_dict = self.graph_creator.idc_dict
@@ -341,7 +344,27 @@ class MemoryZone:
     def count_chains_in_pz(self):
         return len([chain_idx for chain_idx in self.get_state_idxs() if chain_idx in self.graph_creator.pz_edges_idx])
 
-    def find_chains_in_parking_edge(self):
+    def count_chains_in_parking(self):
+        return len(
+            [
+                chain_idx
+                for chain_idx in self.get_state_idxs()
+                if chain_idx == get_idx_from_idc(self.idc_dict, self.graph_creator.parking_edge)
+            ]
+        )
+
+    def find_chain_in_edge(self, edge_idc):
+        chains = [
+            ion
+            for ion, chain_idx in enumerate(self.get_state_idxs())
+            if chain_idx == get_idx_from_idc(self.idc_dict, edge_idc)
+        ]
+        assert len(chains) <= 1, "more than one chain in edge, if parking edge -> use find_chains_in_parking()"
+        if len(chains) == 0:
+            return None
+        return chains[0]
+
+    def find_chains_in_parking(self):
         return [
             ion
             for ion, chain_idx in enumerate(self.get_state_idxs())
@@ -504,71 +527,6 @@ class MemoryZone:
             edge_path.append(edge)
         return [edge_idc, next_edge, *edge_path, edge_idc]
 
-    def create_outer_circle(self, edge_idc, next_edge, path_over_pz=False, include_path_to_exit_edge=True):
-        # make sure that edge_idc and next_edge are connected and in correct order
-        # should not be necessary anymore -> fixed with find_ordered_edges()
-        assert edge_idc[1] == next_edge[0], f"edge_idc {edge_idc} and next_edge {next_edge} are not connected"
-        if path_over_pz is False and include_path_to_exit_edge is False:
-            msg = "path_over_pz and include_path_to_exit_edge cannot both be False (no use case yet)"
-            raise ValueError(msg)
-
-        if path_over_pz is False:
-            # if next edge is not in processing zone
-            # create path that does not contain the chain -> forms circle around it
-            node_path = nx.shortest_path(
-                self.graph,
-                next_edge[1],
-                edge_idc[0],
-                lambda node0, node1, _: [
-                    1e8
-                    if (
-                        get_idx_from_idc(self.idc_dict, (node0, node1)) == get_idx_from_idc(self.idc_dict, edge_idc)
-                        or get_idx_from_idc(self.idc_dict, (node0, node1)) == get_idx_from_idc(self.idc_dict, next_edge)
-                        or get_idx_from_idc(self.idc_dict, (node0, node1))
-                        == get_idx_from_idc(self.idc_dict, self.graph_creator.entry_edge)
-                    )
-                    else 1
-                ][0],
-            )
-        elif include_path_to_exit_edge is True:
-            # create path but including the processing zone
-            node_path = nx.shortest_path(
-                self.graph,
-                next_edge[1],
-                edge_idc[0],
-                lambda node0, node1, _: [
-                    1e8
-                    if (
-                        get_idx_from_idc(self.idc_dict, (node0, node1)) == get_idx_from_idc(self.idc_dict, edge_idc)
-                        or get_idx_from_idc(self.idc_dict, (node0, node1)) == get_idx_from_idc(self.idc_dict, next_edge)
-                    )
-                    else 1
-                ][0],
-            )
-        else:
-            # create path but including the processing zone but exclude edge that leads instantly back to exit
-            node_path = nx.shortest_path(
-                self.graph,
-                next_edge[1],
-                edge_idc[0],
-                lambda node0, node1, _: [
-                    1e8
-                    if (
-                        get_idx_from_idc(self.idc_dict, (node0, node1)) == get_idx_from_idc(self.idc_dict, edge_idc)
-                        or get_idx_from_idc(self.idc_dict, (node0, node1)) == get_idx_from_idc(self.idc_dict, next_edge)
-                    )
-                    or get_idx_from_idc(self.idc_dict, (node0, node1))
-                    == get_idx_from_idc(self.idc_dict, self.path_entry_to_exit[0])
-                    else 1
-                ][0],
-            )
-
-        edge_path = []
-        for edge in pairwise(node_path):
-            edge_path.append(edge)
-
-        return edge_path
-
     def check_if_edge_is_filled(self, edge_idc):
         return get_idx_from_idc(self.idc_dict, edge_idc) in self.state_idxs
 
@@ -587,7 +545,10 @@ class MemoryZone:
                 elif get_idx_from_idc(self.idc_dict, circles_dict[circle][0]) == get_idx_from_idc(
                     self.idc_dict, self.graph_creator.parking_edge
                 ):
-                    circle_or_path = []
+                    if self.count_chains_in_parking() >= self.max_num_parking:
+                        circle_or_path = [(circles_dict[circle][0][0], circles_dict[circle][0][0])]
+                    else:
+                        circle_or_path = []
                 else:  # else if path is same edge twice skip (but of course keep first node -> no movement into this edge)
                     circle_or_path = [(circles_dict[circle][0][0], circles_dict[circle][0][0])]
             # if circle is real circle -> need to check all nodes
@@ -726,11 +687,20 @@ class MemoryZone:
         )
         return path_to_pz + path_from_pz
 
-    def find_least_import_chain_in_pz(self, seq, ions_in_pz):
+    # def find_least_import_chain_in_pz(self, seq, ions_in_pz):
+    #     for num in seq:
+    #         if num in ions_in_pz:
+    #             ions_in_pz.remove(num)
+    #             if len(ions_in_pz) == 1:
+    #                 return ions_in_pz[0]
+    #             print(ions_in_pz)
+    #     return ions_in_pz[-1]
+
+    def find_least_import_chain_in_parking(self, seq, ions_in_parking):
         for num in seq:
-            if num in ions_in_pz:
-                ions_in_pz.remove(num)
-                if len(ions_in_pz) == 1:
-                    return ions_in_pz[0]
-                print(ions_in_pz)
-        return ions_in_pz[-1]
+            if num in ions_in_parking:
+                ions_in_parking.remove(num)
+                if len(ions_in_parking) == 1:
+                    return ions_in_parking[0]
+                print(ions_in_parking)
+        return ions_in_parking[-1]

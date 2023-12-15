@@ -116,10 +116,8 @@ perc = 0.5
 results = {}
 cpu_time_results = {}
 start_time_all = time.time()
-show_plot = True
-save_plot = False
-# assert either show_plot or save_plot is True, "Either show_plot or save_plot must be True"
-assert not (show_plot and save_plot), "Only one of show_plot or save_plot can be True"
+show_plot = False
+save_plot = not show_plot
 
 for j, arch in enumerate(archs):
     timestep_arr = []
@@ -141,7 +139,8 @@ for j, arch in enumerate(archs):
             [trap for trap in graph.edges() if graph.get_edge_data(trap[0], trap[1])["edge_type"] == "trap"]
         )
         ion_chains, number_of_registers = create_starting_config(perc, graph, seed=seed)
-        max_chains_in_pz = 3
+        max_chains_in_pz = 4
+        max_chains_in_parking = 3
 
         # generate sequence and two-qubit sequence
         N = number_of_registers
@@ -184,8 +183,11 @@ for j, arch in enumerate(archs):
         max_timesteps = 50000
         # time_2qubit_gate only works for 2-qubit gates -> need also for 1-qubit gates
         time_2qubit_gate = 3
+        time_in_pz_counter = 0
 
-        Mem1 = MemoryZone(m, n, v, h, ion_chains, sequence, max_timesteps, time_2qubit_gate=time_2qubit_gate)
+        Mem1 = MemoryZone(
+            m, n, v, h, ion_chains, sequence, max_timesteps, max_chains_in_parking, time_2qubit_gate=time_2qubit_gate
+        )
         timestep = 0
         print("time step: %s" % timestep)
 
@@ -196,7 +198,7 @@ for j, arch in enumerate(archs):
             [get_idx_from_idc(Mem1.idc_dict, edge_idc) for edge_idc in Mem1.ion_chains.values()],
             labels=[
                 "time step %s" % timestep,
-                "next 3 seq elem: %s" % seq[seq_element_counter : seq_element_counter + 3],
+                f"next seq elem: {seq[seq_element_counter]}",
             ],
             show_plot=show_plot,
             save_plot=save_plot,
@@ -207,6 +209,7 @@ for j, arch in enumerate(archs):
         next_seq_ion_in_exit = 0
 
         seq_ion_was_at_entry = False
+        gate_execution_finished = True
         # timestep = 1
         while timestep < max_timesteps:
             # update state_idxs
@@ -233,7 +236,7 @@ for j, arch in enumerate(archs):
                 # make edge_idc and next_edge consistent
                 edge_idc, next_edge = Mem1.find_ordered_edges(edge_idc, next_edge)
 
-                # if next_edge (now over junction) is free -> circle not needed -> only edge_idc + next_edge
+                # if next_edge (now over junction) is free (or is parking edge which can hold multiple ions) -> circle not needed -> only edge_idc + next_edge
                 if not Mem1.check_if_edge_is_filled(next_edge) or get_idx_from_idc(
                     Mem1.idc_dict, next_edge
                 ) == get_idx_from_idc(Mem1.idc_dict, Mem1.graph_creator.parking_edge):
@@ -242,21 +245,55 @@ for j, arch in enumerate(archs):
                     all_circles[rotate_chain] = Mem1.new_create_outer_circle(edge_idc, next_edge)
 
                 # if pz full or chain not yet needed -> can't move chain into pz
-                num_chains_in_pz = Mem1.count_chains_in_pz()
-                if (
-                    get_idx_from_idc(Mem1.idc_dict, next_edge) in Mem1.graph_creator.pz_edges_idx
-                    and get_idx_from_idc(Mem1.idc_dict, edge_idc) not in Mem1.graph_creator.pz_edges_idx
-                ) and (num_chains_in_pz >= max_chains_in_pz or rotate_chain not in sequence[:2]):
+                # num_chains_in_pz = Mem1.count_chains_in_pz()
+                # if (
+                #     get_idx_from_idc(Mem1.idc_dict, next_edge) in Mem1.graph_creator.pz_edges_idx
+                #     and get_idx_from_idc(Mem1.idc_dict, edge_idc) not in Mem1.graph_creator.pz_edges_idx
+                # ) and (num_chains_in_pz >= max_chains_in_pz or rotate_chain not in sequence[:2]):
+                #     all_circles[rotate_chain] = [edge_idc, edge_idc]
+
+                # if exit full -> can't move to exit TODO
+                num_chains_in_exit = (
+                    get_idx_from_idc(Mem1.idc_dict, Mem1.graph_creator.exit_edge) in Mem1.state_idxs
+                )  # TODO
+                if get_idx_from_idc(Mem1.idc_dict, next_edge) == get_idx_from_idc(
+                    Mem1.idc_dict, Mem1.graph_creator.exit_edge
+                ) and (
+                    num_chains_in_exit >= 2
+                ):  # TODO for now most allowed is 1 chain -> >=2 not allowed
+                    all_circles[rotate_chain] = [edge_idc, edge_idc]
+
+                # if parking full -> can't move chain into parking
+                # + if chain is not needed yet
+                num_chains_in_parking = Mem1.count_chains_in_parking()
+                if get_idx_from_idc(Mem1.idc_dict, next_edge) == get_idx_from_idc(
+                    Mem1.idc_dict, Mem1.graph_creator.parking_edge
+                ) and (num_chains_in_parking >= Mem1.max_num_parking or not gate_execution_finished):
                     all_circles[rotate_chain] = [edge_idc, edge_idc]
 
             # move chain out of parking edge if needed
-            chains_in_parking = Mem1.find_chains_in_parking_edge()
-            if num_chains_in_pz >= max_chains_in_pz and len(chains_in_parking) == max_chains_in_pz:
-                chain_to_move_out_of_pz = Mem1.find_least_import_chain_in_pz(sequence, chains_in_parking)
-                Mem1.ion_chains[chain_to_move_out_of_pz] = Mem1.graph_creator.entry_edge
-                all_circles[chain_to_move_out_of_pz] = [Mem1.graph_creator.entry_edge, Mem1.graph_creator.entry_edge]
-
-            # TODO move chain from entry back into memory zone
+            chains_in_parking = Mem1.find_chains_in_parking()
+            chain_in_exit = Mem1.find_chain_in_edge(Mem1.graph_creator.exit_edge)
+            # if pz full and no chain is moving out (not in state_idxs entry edge)
+            if (
+                num_chains_in_parking >= Mem1.max_num_parking
+                and gate_execution_finished
+                and get_idx_from_idc(Mem1.idc_dict, Mem1.graph_creator.entry_edge) not in Mem1.state_idxs
+                and get_idx_from_idc(Mem1.idc_dict, Mem1.graph_creator.exit_edge) in Mem1.state_idxs
+            ):
+                # find least important chain in parking edge
+                chain_to_move_out_of_pz = Mem1.find_least_import_chain_in_parking(
+                    sequence, [*chains_in_parking, chain_in_exit]
+                )
+                print("CHAIN TO MOVE OUT OF PZ", chain_to_move_out_of_pz, chain_in_exit)
+                if chain_to_move_out_of_pz != chain_in_exit:
+                    # move it to entry
+                    Mem1.ion_chains[chain_to_move_out_of_pz] = Mem1.graph_creator.entry_edge
+                    # change its path/circle to a stop move
+                    all_circles[chain_to_move_out_of_pz] = [
+                        Mem1.graph_creator.entry_edge,
+                        Mem1.graph_creator.entry_edge,
+                    ]
 
             print("all circles: %s" % all_circles)
 
@@ -284,34 +321,53 @@ for j, arch in enumerate(archs):
                 print("rotate seq_idx", seq_idx)
                 Mem1.rotate(free_circle_idxs[seq_idx])
 
-            ######### UPDATE SEQUENCE #########
+            ######### PLOT #########
+            # Save the current plot (plot widget)
+            plot_filename = Path(run_folder) / f"plot_{timestep:03d}.png"
+
+            ######### UPDATE SEQUENCE / PROCESS GATE #########
             gate = seq[seq_element_counter]
-            chains_in_parking = Mem1.find_chains_in_parking_edge()
+            chains_in_parking = Mem1.find_chains_in_parking()
             if sum((gate_element in chains_in_parking) for gate_element in gate) == len(gate):
+                # new TODO use gate_execution_finished or not?
+                gate_execution_finished = False
+                time_in_pz_counter += 1
+
+                Mem1.graph_creator.plot_state(
+                    [get_idx_from_idc(Mem1.idc_dict, edge_idc) for edge_idc in Mem1.ion_chains.values()],
+                    labels=["time step %s" % timestep, f"seq elem {seq[seq_element_counter]} executed"],
+                    show_plot=show_plot,
+                    save_plot=save_plot,
+                    filename=[plot_filename if save_plot else None][0],
+                )
+
                 print(f"\ntime step: {timestep}, gate {seq[seq_element_counter]} is executed")
-                for _ in gate:
-                    sequence.pop(0)
-                seq_element_counter += 1
+                if time_in_pz_counter == time_2qubit_gate:
+                    for _ in gate:
+                        sequence.pop(0)
+                    seq_element_counter += 1
+                    time_in_pz_counter = 0
+                    gate_execution_finished = True
+
+            else:
+                Mem1.graph_creator.plot_state(
+                    [get_idx_from_idc(Mem1.idc_dict, edge_idc) for edge_idc in Mem1.ion_chains.values()],
+                    labels=["time step %s" % timestep, f"next seq elem: {seq[seq_element_counter]}"],
+                    show_plot=show_plot,
+                    save_plot=save_plot,
+                    filename=[plot_filename if save_plot else None][0],
+                )
 
             ######### END IF SEQUENCE IS FINISHED #########
             if len(sequence) == 0:
                 print("\nFull Sequence executed")
+                cpu_time_arr.append(time.time() - start_time)
+                timestep_arr.append(timestep)
                 break
 
-            ######### SAVE PLOT AND SETUP NEW TIME STEP #########
+            ######### SETUP NEW TIME STEP #########
             timestep += 1
             print("new timestep: %s" % timestep)
-
-            # Save the current plot with a meaningful filename (plot widget)
-            plot_filename = Path(run_folder) / f"plot_{timestep:03d}.png"
-
-            Mem1.graph_creator.plot_state(
-                [get_idx_from_idc(Mem1.idc_dict, edge_idc) for edge_idc in Mem1.ion_chains.values()],
-                labels=["time step %s" % timestep, "next seq elem: %s" % sequence[0]],
-                show_plot=show_plot,
-                save_plot=save_plot,
-                filename=[plot_filename if save_plot else None][0],
-            )
 
     timestep_mean = np.mean(timestep_arr)
     cpu_time_mean = np.mean(cpu_time_arr)
@@ -327,3 +383,5 @@ print("time all: \n", time.time() - start_time_all)
 # TODO repeating sequence elements
 
 # e.g. time step 50 -> 0 goes out of entry towards top left (but only because free edge is in second row from bottom -> was correctly searched from exit, but lowest row is full on the left side -> should search at bottom be bfs?)
+
+# TODO movements are not perfect yet -> how many are allowed in pz? A lot of waiting time right now

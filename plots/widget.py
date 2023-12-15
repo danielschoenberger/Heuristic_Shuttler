@@ -71,7 +71,7 @@ script_directory = Path(__file__).parent
 
 # Replace 'your_folder_path' with the actual path to the folder containing your PNG frames
 # Join the script's directory with the relative path to your folder
-folder_path = script_directory / "run_20231203_162502"
+folder_path = script_directory / "run_20231215_005017"
 
 # Create the ImageWidget instance
 image_widget = ImageWidget(folder_path)
