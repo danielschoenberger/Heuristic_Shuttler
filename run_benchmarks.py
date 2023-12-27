@@ -52,12 +52,17 @@ def preprocess(memorygrid, sequence):
     return memorygrid
 
 
-def create_move_list(memorygrid, sequence):
+def create_move_list(memorygrid, sequence, max_length=5):
+    """
+    max_length: max length of move_list (if sequence is longer than max_length, only first max_length elements are considered)
+    """
     # unique sequence is sequence without repeating elements (for move_list and 2-qubit gates)
     unique_sequence = []
     for seq_elem in sequence:
         if seq_elem not in unique_sequence:
             unique_sequence.append(seq_elem)
+            if len(unique_sequence) == max_length:
+                break
 
     path_length_sequence = {}
     move_list = []
@@ -96,6 +101,7 @@ def create_move_list(memorygrid, sequence):
                 move_list.remove(rotate_chain)
             move_list = [rotate_chain, *move_list]
 
+    # chain in entry must move out
     chain_in_entry_list = [
         ion
         for ion, chain_idx in enumerate(memorygrid.get_state_idxs())
@@ -103,21 +109,23 @@ def create_move_list(memorygrid, sequence):
     ]
     if len(chain_in_entry_list) > 0:
         chain_in_entry = chain_in_entry_list[0]
-        if chain_in_entry in move_list:
+        # if chain_in_entry in move_list:
+        with contextlib.suppress(Exception):
             move_list.remove(chain_in_entry)
         move_list = [chain_in_entry, *move_list]
 
     return move_list
 
 
-archs = [[3, 3, 1, 1]]  # , [5, 5, 1, 1], [6, 6, 1, 1]]#, [20, 20, 1, 1], [5, 5, 10, 10]]#[5, 5, 1, 1],
+archs = [[3, 4, 2, 2]]  # , [5, 5, 1, 1], [6, 6, 1, 1]]#, [20, 20, 1, 1], [5, 5, 10, 10]]#[5, 5, 1, 1],
 seeds = [2]  # 1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
 perc = 0.5
 results = {}
 cpu_time_results = {}
 start_time_all = time.time()
-show_plot = False
+show_plot = True
 save_plot = not show_plot
+use_gate_execution = False
 
 for j, arch in enumerate(archs):
     timestep_arr = []
@@ -139,7 +147,7 @@ for j, arch in enumerate(archs):
             [trap for trap in graph.edges() if graph.get_edge_data(trap[0], trap[1])["edge_type"] == "trap"]
         )
         ion_chains, number_of_registers = create_starting_config(perc, graph, seed=seed)
-        max_chains_in_pz = 4
+        # max_chains_in_pz = 4 # TODO needed?
         max_chains_in_parking = 3
 
         # generate sequence and two-qubit sequence
@@ -191,7 +199,7 @@ for j, arch in enumerate(archs):
         timestep = 0
         print("time step: %s" % timestep)
 
-        # Save the current plot with a meaningful filename (plot widget)
+        # Save the current plot (plot widget)
         plot_filename = Path(run_folder) / f"plot_{1:03d}.png"
 
         Mem1.graph_creator.plot_state(
@@ -210,6 +218,7 @@ for j, arch in enumerate(archs):
 
         seq_ion_was_at_entry = False
         gate_execution_finished = True
+
         # timestep = 1
         while timestep < max_timesteps:
             # update state_idxs
@@ -244,14 +253,6 @@ for j, arch in enumerate(archs):
                 else:
                     all_circles[rotate_chain] = Mem1.new_create_outer_circle(edge_idc, next_edge)
 
-                # if pz full or chain not yet needed -> can't move chain into pz
-                # num_chains_in_pz = Mem1.count_chains_in_pz()
-                # if (
-                #     get_idx_from_idc(Mem1.idc_dict, next_edge) in Mem1.graph_creator.pz_edges_idx
-                #     and get_idx_from_idc(Mem1.idc_dict, edge_idc) not in Mem1.graph_creator.pz_edges_idx
-                # ) and (num_chains_in_pz >= max_chains_in_pz or rotate_chain not in sequence[:2]):
-                #     all_circles[rotate_chain] = [edge_idc, edge_idc]
-
                 # if exit full -> can't move to exit TODO
                 num_chains_in_exit = (
                     get_idx_from_idc(Mem1.idc_dict, Mem1.graph_creator.exit_edge) in Mem1.state_idxs
@@ -274,7 +275,7 @@ for j, arch in enumerate(archs):
             # move chain out of parking edge if needed
             chains_in_parking = Mem1.find_chains_in_parking()
             chain_in_exit = Mem1.find_chain_in_edge(Mem1.graph_creator.exit_edge)
-            # if pz full and no chain is moving out (not in state_idxs entry edge)
+            # if pz full and no chain is moving out (not in state_idxs entry edge) but chain is moving in
             if (
                 num_chains_in_parking >= Mem1.max_num_parking
                 and gate_execution_finished
@@ -319,7 +320,8 @@ for j, arch in enumerate(archs):
                 ]
                 # rotate chains
                 print("rotate seq_idx", seq_idx)
-                Mem1.rotate(free_circle_idxs[seq_idx])
+                new_state_dict = Mem1.rotate(free_circle_idxs[seq_idx])
+                # Mem1.rotate_exit(new_state_dict)
 
             ######### PLOT #########
             # Save the current plot (plot widget)
@@ -327,21 +329,30 @@ for j, arch in enumerate(archs):
 
             ######### UPDATE SEQUENCE / PROCESS GATE #########
             gate = seq[seq_element_counter]
+
             chains_in_parking = Mem1.find_chains_in_parking()
             if sum((gate_element in chains_in_parking) for gate_element in gate) == len(gate):
                 # new TODO use gate_execution_finished or not?
-                gate_execution_finished = False
+                if use_gate_execution is True:
+                    gate_execution_finished = False
+
+                # track start of gate execution
+                start_execution = time_in_pz_counter == 0
+
                 time_in_pz_counter += 1
 
                 Mem1.graph_creator.plot_state(
                     [get_idx_from_idc(Mem1.idc_dict, edge_idc) for edge_idc in Mem1.ion_chains.values()],
-                    labels=["time step %s" % timestep, f"seq elem {seq[seq_element_counter]} executed"],
+                    labels=[
+                        "time step %s" % timestep,
+                        f"seq elem {seq[seq_element_counter]} executed, {start_execution}",
+                    ],
                     show_plot=show_plot,
                     save_plot=save_plot,
                     filename=[plot_filename if save_plot else None][0],
                 )
 
-                print(f"\ntime step: {timestep}, gate {seq[seq_element_counter]} is executed")
+                print(f"\ntime step: {timestep}, gate {seq[seq_element_counter]} is executed,")
                 if time_in_pz_counter == time_2qubit_gate:
                     for _ in gate:
                         sequence.pop(0)
@@ -380,8 +391,9 @@ print("cpu time results: \n", cpu_time_results)
 print("time all: \n", time.time() - start_time_all)
 
 
-# TODO repeating sequence elements
-
-# e.g. time step 50 -> 0 goes out of entry towards top left (but only because free edge is in second row from bottom -> was correctly searched from exit, but lowest row is full on the left side -> should search at bottom be bfs?)
-
-# TODO movements are not perfect yet -> how many are allowed in pz? A lot of waiting time right now
+# TODO
+# - move out of parking -> double-check if still works correctly
+# - move from parking to entry
+# - add time for 1-qubit gates
+# - rewrite find_nonfree_and_free_circle_idxs(self, circles_dict) -> some things not needed anymore
+# - clean-up
