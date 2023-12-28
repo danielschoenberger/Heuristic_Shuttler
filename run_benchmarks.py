@@ -83,15 +83,6 @@ def create_move_list(memorygrid, sequence, max_length=5):
         ) == len(move_list):
             move_list.append(rotate_chain)
 
-        # # if ion in exit edge -> move to parking edge (at least second highest priority)
-        # if get_idx_from_idc(memorygrid.idc_dict, edge_idc) == get_idx_from_idc(
-        #     memorygrid.idc_dict, memorygrid.graph_creator.exit_edge
-        # ):
-        #     path_length_sequence[rotate_chain] = 0
-        #     with contextlib.suppress(Exception):
-        #         move_list.remove(rotate_chain)
-        #     move_list = [rotate_chain, *move_list]
-
         # if ion in entry edge -> move back to memory zone (highest priority)
         if get_idx_from_idc(memorygrid.idc_dict, edge_idc) == get_idx_from_idc(
             memorygrid.idc_dict, memorygrid.graph_creator.entry_edge
@@ -127,7 +118,7 @@ perc = 0.5
 results = {}
 cpu_time_results = {}
 start_time_all = time.time()
-show_plot = False
+show_plot = True
 save_plot = not show_plot
 use_gate_execution = True
 
@@ -377,7 +368,9 @@ for j, arch in enumerate(archs):
                 )
 
                 print(f"\ntime step: {timestep}, gate {seq[seq_element_counter]} is executed,")
-                if time_in_pz_counter == time_2qubit_gate:
+                time_gate = time_2qubit_gate if seq_element_counter == two_qubit_sequence[0] else time_1qubit_gate
+
+                if time_in_pz_counter == time_gate:
                     for _ in gate:
                         sequence.pop(0)
                     seq_element_counter += 1
