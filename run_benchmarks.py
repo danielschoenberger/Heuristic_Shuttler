@@ -83,14 +83,14 @@ def create_move_list(memorygrid, sequence, max_length=5):
         ) == len(move_list):
             move_list.append(rotate_chain)
 
-        # if ion in exit edge -> move to parking edge (at least second highest priority)
-        if get_idx_from_idc(memorygrid.idc_dict, edge_idc) == get_idx_from_idc(
-            memorygrid.idc_dict, memorygrid.graph_creator.exit_edge
-        ):
-            path_length_sequence[rotate_chain] = 0
-            with contextlib.suppress(Exception):
-                move_list.remove(rotate_chain)
-            move_list = [rotate_chain, *move_list]
+        # # if ion in exit edge -> move to parking edge (at least second highest priority)
+        # if get_idx_from_idc(memorygrid.idc_dict, edge_idc) == get_idx_from_idc(
+        #     memorygrid.idc_dict, memorygrid.graph_creator.exit_edge
+        # ):
+        #     path_length_sequence[rotate_chain] = 0
+        #     with contextlib.suppress(Exception):
+        #         move_list.remove(rotate_chain)
+        #     move_list = [rotate_chain, *move_list]
 
         # if ion in entry edge -> move back to memory zone (highest priority)
         if get_idx_from_idc(memorygrid.idc_dict, edge_idc) == get_idx_from_idc(
@@ -125,7 +125,7 @@ cpu_time_results = {}
 start_time_all = time.time()
 show_plot = True
 save_plot = not show_plot
-use_gate_execution = False
+use_gate_execution = True
 
 for j, arch in enumerate(archs):
     timestep_arr = []
@@ -233,7 +233,15 @@ for j, arch in enumerate(archs):
 
             ######### CREATE CIRCLES #########
             ### create circles for all chains in move_list (dictionary with chain as key and circle_idcs as value)
+            # rotate_exit = False
+            chain_to_park = Mem1.find_chain_in_edge(Mem1.graph_creator.path_to_pz[-1])
+            if Mem1.count_chains_in_parking() < Mem1.max_num_parking or gate_execution_finished:
+                parking_open = True
+            else:
+                parking_open = False
+
             all_circles = {}
+            stop_exit_edges = []
             for rotate_chain in move_list:
                 edge_idc = Mem1.ion_chains[rotate_chain]
 
@@ -245,49 +253,59 @@ for j, arch in enumerate(archs):
                 # make edge_idc and next_edge consistent
                 edge_idc, next_edge = Mem1.find_ordered_edges(edge_idc, next_edge)
 
-                # if next_edge (now over junction) is free (or is parking edge which can hold multiple ions) -> circle not needed -> only edge_idc + next_edge
-                if not Mem1.check_if_edge_is_filled(next_edge) or get_idx_from_idc(
-                    Mem1.idc_dict, next_edge
-                ) == get_idx_from_idc(Mem1.idc_dict, Mem1.graph_creator.parking_edge):
+                # moves in pz
+                if get_idx_from_idc(Mem1.idc_dict, next_edge) in [
+                    *Mem1.graph_creator.path_to_pz_idxs,
+                    get_idx_from_idc(Mem1.idc_dict, Mem1.graph_creator.parking_edge),
+                ]:
+                    # if (gate_execution_finished or Mem1.count_chains_in_parking()<Mem1.max_num_parking):
                     all_circles[rotate_chain] = [edge_idc, next_edge]
+                    # else:
+                    #    all_circles[rotate_chain] = [edge_idc, edge_idc]
+                    if (
+                        get_idx_from_idc(Mem1.idc_dict, next_edge)
+                        in [
+                            *Mem1.graph_creator.path_to_pz_idxs,
+                            get_idx_from_idc(Mem1.idc_dict, Mem1.graph_creator.parking_edge),
+                        ]
+                        and parking_open is False
+                    ) and (get_idx_from_idc(Mem1.idc_dict, next_edge) in stop_exit_edges or stop_exit_edges == []):
+                        all_circles[rotate_chain] = [edge_idc, edge_idc]
+                        stop_exit_edges.append(get_idx_from_idc(Mem1.idc_dict, edge_idc))
+                # moves without circle
+                elif not Mem1.check_if_edge_is_filled(next_edge):
+                    all_circles[rotate_chain] = [edge_idc, next_edge]
+                # moves with circle
                 else:
+                    # else create circle (in pz circle is a "stop move")
                     all_circles[rotate_chain] = Mem1.new_create_outer_circle(edge_idc, next_edge)
 
-                # if exit full -> can't move to exit TODO
-                num_chains_in_exit = (
-                    get_idx_from_idc(Mem1.idc_dict, Mem1.graph_creator.exit_edge) in Mem1.state_idxs
-                )  # TODO
-                if get_idx_from_idc(Mem1.idc_dict, next_edge) == get_idx_from_idc(
-                    Mem1.idc_dict, Mem1.graph_creator.exit_edge
-                ) and (
-                    num_chains_in_exit >= 2
-                ):  # TODO for now most allowed is 1 chain -> >=2 not allowed
-                    all_circles[rotate_chain] = [edge_idc, edge_idc]
-
-                # if parking full -> can't move chain into parking
-                # + if chain is not needed yet
-                num_chains_in_parking = Mem1.count_chains_in_parking()
-                if get_idx_from_idc(Mem1.idc_dict, next_edge) == get_idx_from_idc(
-                    Mem1.idc_dict, Mem1.graph_creator.parking_edge
-                ) and (num_chains_in_parking >= Mem1.max_num_parking or not gate_execution_finished):
-                    all_circles[rotate_chain] = [edge_idc, edge_idc]
+                # # if next_edge (now over junction) is free (or is in pz and can move to parking, i.e. gate is finished (ion moves out) or parking not full)
+                # # -> circle not needed -> only edge_idc + next_edge
+                # if not Mem1.check_if_edge_is_filled(next_edge) or (get_idx_from_idc(
+                #     Mem1.idc_dict, next_edge
+                # ) in Mem1.graph_creator.pz_edges_idx and (gate_execution_finished or Mem1.count_chains_in_parking()<Mem1.max_num_parking)):
+                #     all_circles[rotate_chain] = [edge_idc, next_edge]
+                #     # if in pz -> delete and flip switch -> all in pz get moved
+                # else:
+                #     # else create circle (in pz circle is a "stop move")
+                #     all_circles[rotate_chain] = Mem1.new_create_outer_circle(edge_idc, next_edge)
 
             # move chain out of parking edge if needed
             chains_in_parking = Mem1.find_chains_in_parking()
-            chain_in_exit = Mem1.find_chain_in_edge(Mem1.graph_creator.exit_edge)
             # if pz full and no chain is moving out (not in state_idxs entry edge) but chain is moving in
             if (
-                num_chains_in_parking >= Mem1.max_num_parking
+                Mem1.count_chains_in_parking() >= Mem1.max_num_parking
                 and gate_execution_finished
-                and get_idx_from_idc(Mem1.idc_dict, Mem1.graph_creator.entry_edge) not in Mem1.state_idxs
-                and get_idx_from_idc(Mem1.idc_dict, Mem1.graph_creator.exit_edge) in Mem1.state_idxs
+                # and get_idx_from_idc(Mem1.idc_dict, Mem1.graph_creator.entry_edge) not in Mem1.state_idxs
+                and chain_to_park is not None
             ):
                 # find least important chain in parking edge
                 chain_to_move_out_of_pz = Mem1.find_least_import_chain_in_parking(
-                    sequence, [*chains_in_parking, chain_in_exit]
+                    sequence, [*chains_in_parking, chain_to_park]
                 )
-                print("CHAIN TO MOVE OUT OF PZ", chain_to_move_out_of_pz, chain_in_exit)
-                if chain_to_move_out_of_pz != chain_in_exit:
+                print("CHAIN TO MOVE OUT OF PZ", chain_to_move_out_of_pz, "chain to park", chain_to_park)
+                if chain_to_move_out_of_pz != chain_to_park:
                     # move it to entry
                     Mem1.ion_chains[chain_to_move_out_of_pz] = Mem1.graph_creator.entry_edge
                     # change its path/circle to a stop move
@@ -320,8 +338,12 @@ for j, arch in enumerate(archs):
                 ]
                 # rotate chains
                 print("rotate seq_idx", seq_idx)
+                # chain_was_in_exit = False
+                # if Mem1.find_chain_in_edge(Mem1.graph_creator.exit_edge) is not None:
+                #     chain_was_in_exit = True
                 new_state_dict = Mem1.rotate(free_circle_idxs[seq_idx])
-                # Mem1.rotate_exit(new_state_dict)
+                # if rotate_exit:
+                #     Mem1.rotate_exit(new_state_dict, chain_was_in_exit)
 
             ######### PLOT #########
             # Save the current plot (plot widget)
@@ -345,7 +367,7 @@ for j, arch in enumerate(archs):
                     [get_idx_from_idc(Mem1.idc_dict, edge_idc) for edge_idc in Mem1.ion_chains.values()],
                     labels=[
                         "time step %s" % timestep,
-                        f"seq elem {seq[seq_element_counter]} executed, {start_execution}",
+                        f"seq elem {seq[seq_element_counter]} executed",
                     ],
                     show_plot=show_plot,
                     save_plot=save_plot,
@@ -378,7 +400,7 @@ for j, arch in enumerate(archs):
 
             ######### SETUP NEW TIME STEP #########
             timestep += 1
-            print("new timestep: %s" % timestep)
+            print("\nnew timestep: %s" % timestep)
 
     timestep_mean = np.mean(timestep_arr)
     cpu_time_mean = np.mean(cpu_time_arr)
