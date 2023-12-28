@@ -195,10 +195,20 @@ for j, arch in enumerate(archs):
         max_timesteps = 50000
         # time_2qubit_gate only works for 2-qubit gates -> need also for 1-qubit gates
         time_2qubit_gate = 3
+        time_1qubit_gate = 1
         time_in_pz_counter = 0
 
         Mem1 = MemoryZone(
-            m, n, v, h, ion_chains, sequence, max_timesteps, max_chains_in_parking, time_2qubit_gate=time_2qubit_gate
+            m,
+            n,
+            v,
+            h,
+            ion_chains,
+            sequence,
+            max_timesteps,
+            max_chains_in_parking,
+            time_2qubit_gate=time_2qubit_gate,
+            time_1qubit_gate=time_1qubit_gate,
         )
         timestep = 0
         print("time step: %s" % timestep)

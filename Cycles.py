@@ -332,7 +332,17 @@ class GraphCreator:
 
 class MemoryZone:
     def __init__(
-        self, m, n, v, h, starting_config, starting_sequence, max_timestep, max_num_parking, time_2qubit_gate=1
+        self,
+        m,
+        n,
+        v,
+        h,
+        starting_config,
+        starting_sequence,
+        max_timestep,
+        max_num_parking,
+        time_2qubit_gate=2,
+        time_1qubit_gate=1,
     ):
         # new graph MZ
         self.mz_Graph_creator = MZGraphCreator(m, n, v, h)
@@ -345,6 +355,7 @@ class MemoryZone:
         self.max_timestep = max_timestep
         self.max_num_parking = max_num_parking
         self.time_2qubit_gate = time_2qubit_gate
+        self.time_1qubit_gate = time_1qubit_gate
         self.num_ion_chains = len(starting_config)
         self.idc_dict = self.graph_creator.idc_dict
 
