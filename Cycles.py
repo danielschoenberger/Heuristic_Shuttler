@@ -327,6 +327,7 @@ class GraphCreator:
 
         if save_plot is True:
             plt.savefig(filename)
+        plt.close()
 
 
 class MemoryZone:
@@ -427,6 +428,11 @@ class MemoryZone:
 
     def find_next_edge(self, edge_idc, towards=(0, 0)):
         ### find next edge given edge_idc of ion chain
+
+        # if in entry connection -> move to next edge
+        for i, edge_idx in enumerate(self.graph_creator.path_from_pz_idxs[:-1]):
+            if get_idx_from_idc(self.idc_dict, edge_idc) == edge_idx:
+                return get_idc_from_idx(self.idc_dict, self.graph_creator.path_from_pz_idxs[i + 1])
 
         # if in exit or entry -> move through processing zone
         # if get_idx_from_idc(self.idc_dict, edge_idc) == get_idx_from_idc(self.idc_dict, self.graph_creator.exit_edge):

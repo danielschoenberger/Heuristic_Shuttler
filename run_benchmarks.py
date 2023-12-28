@@ -101,29 +101,33 @@ def create_move_list(memorygrid, sequence, max_length=5):
                 move_list.remove(rotate_chain)
             move_list = [rotate_chain, *move_list]
 
+    # get chains in all entry edges and place in front
     # chain in entry must move out
-    chain_in_entry_list = [
-        ion
-        for ion, chain_idx in enumerate(memorygrid.get_state_idxs())
-        if chain_idx == get_idx_from_idc(memorygrid.idc_dict, memorygrid.graph_creator.entry_edge)
-    ]
-    if len(chain_in_entry_list) > 0:
-        chain_in_entry = chain_in_entry_list[0]
-        # if chain_in_entry in move_list:
-        with contextlib.suppress(Exception):
-            move_list.remove(chain_in_entry)
-        move_list = [chain_in_entry, *move_list]
+    chains_in_entry_connections = []
+    for ion, chain_idx in enumerate(memorygrid.get_state_idxs()):
+        if chain_idx in memorygrid.graph_creator.path_from_pz_idxs:
+            if chain_idx == memorygrid.graph_creator.entry_edge:
+                # place chain in entry at the end of move_list -> looping over list leads to chain in entry being first later
+                chains_in_entry_connections.append(ion)
+            else:
+                chains_in_entry_connections.insert(0, ion)
+
+    if len(chains_in_entry_connections) > 0:
+        for ion in chains_in_entry_connections:
+            with contextlib.suppress(Exception):
+                move_list.remove(ion)
+            move_list = [ion, *move_list]
 
     return move_list
 
 
-archs = [[3, 4, 2, 2]]  # , [5, 5, 1, 1], [6, 6, 1, 1]]#, [20, 20, 1, 1], [5, 5, 10, 10]]#[5, 5, 1, 1],
+archs = [[3, 3, 1, 1]]  # , [5, 5, 1, 1], [6, 6, 1, 1]]#, [20, 20, 1, 1], [5, 5, 10, 10]]#[5, 5, 1, 1],
 seeds = [2]  # 1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
 perc = 0.5
 results = {}
 cpu_time_results = {}
 start_time_all = time.time()
-show_plot = True
+show_plot = False
 save_plot = not show_plot
 use_gate_execution = True
 
@@ -280,17 +284,6 @@ for j, arch in enumerate(archs):
                     # else create circle (in pz circle is a "stop move")
                     all_circles[rotate_chain] = Mem1.new_create_outer_circle(edge_idc, next_edge)
 
-                # # if next_edge (now over junction) is free (or is in pz and can move to parking, i.e. gate is finished (ion moves out) or parking not full)
-                # # -> circle not needed -> only edge_idc + next_edge
-                # if not Mem1.check_if_edge_is_filled(next_edge) or (get_idx_from_idc(
-                #     Mem1.idc_dict, next_edge
-                # ) in Mem1.graph_creator.pz_edges_idx and (gate_execution_finished or Mem1.count_chains_in_parking()<Mem1.max_num_parking)):
-                #     all_circles[rotate_chain] = [edge_idc, next_edge]
-                #     # if in pz -> delete and flip switch -> all in pz get moved
-                # else:
-                #     # else create circle (in pz circle is a "stop move")
-                #     all_circles[rotate_chain] = Mem1.new_create_outer_circle(edge_idc, next_edge)
-
             # move chain out of parking edge if needed
             chains_in_parking = Mem1.find_chains_in_parking()
             # if pz full and no chain is moving out (not in state_idxs entry edge) but chain is moving in
@@ -304,14 +297,13 @@ for j, arch in enumerate(archs):
                 chain_to_move_out_of_pz = Mem1.find_least_import_chain_in_parking(
                     sequence, [*chains_in_parking, chain_to_park]
                 )
-                print("CHAIN TO MOVE OUT OF PZ", chain_to_move_out_of_pz, "chain to park", chain_to_park)
                 if chain_to_move_out_of_pz != chain_to_park:
                     # move it to entry
-                    Mem1.ion_chains[chain_to_move_out_of_pz] = Mem1.graph_creator.entry_edge
+                    Mem1.ion_chains[chain_to_move_out_of_pz] = Mem1.graph_creator.path_from_pz[0]
                     # change its path/circle to a stop move
                     all_circles[chain_to_move_out_of_pz] = [
-                        Mem1.graph_creator.entry_edge,
-                        Mem1.graph_creator.entry_edge,
+                        Mem1.graph_creator.path_from_pz[0],
+                        Mem1.graph_creator.path_from_pz[0],
                     ]
 
             print("all circles: %s" % all_circles)
