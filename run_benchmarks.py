@@ -112,13 +112,13 @@ def create_move_list(memorygrid, sequence, max_length=5):
     return move_list
 
 
-archs = [[3, 3, 1, 1]]  # , [5, 5, 1, 1], [6, 6, 1, 1]]#, [20, 20, 1, 1], [5, 5, 10, 10]]#[5, 5, 1, 1],
+archs = [[3, 4, 2, 2]]  # , [5, 5, 1, 1], [6, 6, 1, 1]]#, [20, 20, 1, 1], [5, 5, 10, 10]]#[5, 5, 1, 1],
 seeds = [2]  # 1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
 perc = 0.5
 results = {}
 cpu_time_results = {}
 start_time_all = time.time()
-show_plot = False
+show_plot = True
 save_plot = not show_plot
 use_gate_execution = True
 
@@ -409,8 +409,10 @@ print("time all: \n", time.time() - start_time_all)
 
 
 # TODO
-# - move out of parking -> double-check if still works correctly
-# - move from parking to entry
-# - add time for 1-qubit gates
-# - rewrite find_nonfree_and_free_circle_idxs(self, circles_dict) -> some things not needed anymore
-# - clean-up
+# - move out of parking -> double-check if still works correctly [done]
+# - move from parking to entry [done]
+# - add time for 1-qubit gates [done]
+# - check if correct chain moves out of parking [x]
+# - check if chain moves to correct edge after moving out of entry [x]
+# - rewrite find_nonfree_and_free_circle_idxs(self, circles_dict) -> some things not needed anymore [x]
+# - clean-up [x]
