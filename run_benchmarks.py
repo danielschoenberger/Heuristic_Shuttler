@@ -118,7 +118,7 @@ perc = 0.5
 results = {}
 cpu_time_results = {}
 start_time_all = time.time()
-show_plot = True
+show_plot = False
 save_plot = not show_plot
 use_gate_execution = True
 
@@ -158,11 +158,9 @@ for j, arch in enumerate(archs):
 
         two_qubit_seq = []
         i = 0
-        s = 0
         while i < len(seq):
             if len(seq[i]) == 2:
-                two_qubit_seq.append(i + s)
-                s += 1
+                two_qubit_seq.append(i)
             i += 1
 
         # TODO no immediately repeating seq elements are possible, e.g. [0, 1, 1, 2]
@@ -179,7 +177,9 @@ for j, arch in enumerate(archs):
         # assert (
         #    two_qubit_sequence[-2] != len(sequence) - 1
         # ), "2-qubit sequence is not valid (last element can not be 2-qubit gate)"
-
+        print("two-qubit sequence: %s" % two_qubit_sequence)
+        print("sequence: %s" % sequence)
+        print("seq", seq)
         seq_element_counter = 0
 
         print(f"arch: {arch}, seed: {seed}, registers: {number_of_registers}\n")
