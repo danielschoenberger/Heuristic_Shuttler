@@ -226,6 +226,7 @@ for j, arch in enumerate(archs):
 
         # timestep = 1
         while timestep < max_timesteps:
+            rotate_entry = False
             # update state_idxs
             Mem1.get_state_idxs()
 
@@ -300,7 +301,7 @@ for j, arch in enumerate(archs):
                 )
                 if chain_to_move_out_of_pz != chain_to_park:
                     # move it to entry
-                    Mem1.ion_chains[chain_to_move_out_of_pz] = Mem1.graph_creator.path_from_pz[0]
+                    rotate_entry = True
                     # change its path/circle to a stop move
                     all_circles[chain_to_move_out_of_pz] = [
                         Mem1.graph_creator.path_from_pz[0],
@@ -331,12 +332,9 @@ for j, arch in enumerate(archs):
                 ]
                 # rotate chains
                 print("rotate seq_idx", seq_idx)
-                # chain_was_in_exit = False
-                # if Mem1.find_chain_in_edge(Mem1.graph_creator.exit_edge) is not None:
-                #     chain_was_in_exit = True
                 new_state_dict = Mem1.rotate(free_circle_idxs[seq_idx])
-                # if rotate_exit:
-                #     Mem1.rotate_exit(new_state_dict, chain_was_in_exit)
+                if rotate_entry:
+                    Mem1.ion_chains[chain_to_move_out_of_pz] = Mem1.graph_creator.path_from_pz[0]
 
             ######### PLOT #########
             # Save the current plot (plot widget)
@@ -373,6 +371,8 @@ for j, arch in enumerate(archs):
                 if time_in_pz_counter == time_gate:
                     for _ in gate:
                         sequence.pop(0)
+                    if seq_element_counter == two_qubit_sequence[0]:
+                        two_qubit_sequence.pop(0)
                     seq_element_counter += 1
                     time_in_pz_counter = 0
                     gate_execution_finished = True

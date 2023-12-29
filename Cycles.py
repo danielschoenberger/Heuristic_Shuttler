@@ -708,6 +708,7 @@ class MemoryZone:
         for ion, edge in self.ion_chains.items():
             edge_state_dict[get_idx_from_idc(self.idc_dict, edge)] = ion
         print("edge_state_dict", edge_state_dict)
+        print("full_circle_idxs", [get_idc_from_idx(self.idc_dict, edge_idx) for edge_idx in full_circle_idxs])
         new_edge_state_dict = {}
         for edge_bef, edge_aft in pairwise(full_circle_idxs):
             try:
