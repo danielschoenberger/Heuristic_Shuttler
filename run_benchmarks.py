@@ -118,7 +118,7 @@ perc = 0.5
 results = {}
 cpu_time_results = {}
 start_time_all = time.time()
-show_plot = False
+show_plot = True
 save_plot = False  # not show_plot
 use_gate_execution = True
 
@@ -196,16 +196,16 @@ for j, arch in enumerate(archs):
         # Save the current plot (plot widget)
         plot_filename = Path(run_folder) / f"plot_{1:03d}.png"
 
-        # Mem1.graph_creator.plot_state(
-        #     [get_idx_from_idc(Mem1.idc_dict, edge_idc) for edge_idc in Mem1.ion_chains.values()],
-        #     labels=[
-        #         "time step %s" % timestep,
-        #         f"next seq elem: {seq[seq_element_counter]}",
-        #     ],
-        #     show_plot=show_plot,
-        #     save_plot=save_plot,
-        #     filename=[plot_filename if save_plot else None][0],
-        # )
+        Mem1.graph_creator.plot_state(
+            [get_idx_from_idc(Mem1.idc_dict, edge_idc) for edge_idc in Mem1.ion_chains.values()],
+            labels=[
+                "time step %s" % timestep,
+                f"next seq elem: {seq[seq_element_counter]}",
+            ],
+            show_plot=show_plot,
+            save_plot=save_plot,
+            filename=[plot_filename if save_plot else None][0],
+        )
 
         seq_ion_was_at_entry = 0
         next_seq_ion_in_exit = 0
@@ -339,16 +339,16 @@ for j, arch in enumerate(archs):
                 start_execution = time_in_pz_counter == 0
 
                 time_in_pz_counter += 1
-                # Mem1.graph_creator.plot_state(
-                #     [get_idx_from_idc(Mem1.idc_dict, edge_idc) for edge_idc in Mem1.ion_chains.values()],
-                #     labels=[
-                #         "time step %s" % timestep,
-                #         f"seq elem {seq[seq_element_counter]} executed",
-                #     ],
-                #     show_plot=show_plot,
-                #     save_plot=save_plot,
-                #     filename=[plot_filename if save_plot else None][0],
-                # )
+                Mem1.graph_creator.plot_state(
+                    [get_idx_from_idc(Mem1.idc_dict, edge_idc) for edge_idc in Mem1.ion_chains.values()],
+                    labels=[
+                        "time step %s" % timestep,
+                        f"seq elem {seq[seq_element_counter]} executed",
+                    ],
+                    show_plot=show_plot,
+                    save_plot=save_plot,
+                    filename=[plot_filename if save_plot else None][0],
+                )
 
                 print(f"\ntime step: {timestep}, gate {seq[seq_element_counter]} is executed,")
                 time_gate = time_2qubit_gate if seq_element_counter == two_qubit_sequence[0] else time_1qubit_gate
@@ -362,14 +362,14 @@ for j, arch in enumerate(archs):
                     time_in_pz_counter = 0
                     gate_execution_finished = True
 
-            # else:
-            #     Mem1.graph_creator.plot_state(
-            #         [get_idx_from_idc(Mem1.idc_dict, edge_idc) for edge_idc in Mem1.ion_chains.values()],
-            #         labels=["time step %s" % timestep, f"next seq elem: {seq[seq_element_counter]}"],
-            #         show_plot=show_plot,
-            #         save_plot=save_plot,
-            #         filename=[plot_filename if save_plot else None][0],
-            #     )
+            else:
+                Mem1.graph_creator.plot_state(
+                    [get_idx_from_idc(Mem1.idc_dict, edge_idc) for edge_idc in Mem1.ion_chains.values()],
+                    labels=["time step %s" % timestep, f"next seq elem: {seq[seq_element_counter]}"],
+                    show_plot=show_plot,
+                    save_plot=save_plot,
+                    filename=[plot_filename if save_plot else None][0],
+                )
 
             ######### END IF SEQUENCE IS FINISHED #########
             if len(sequence) == 0:
