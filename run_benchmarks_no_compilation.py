@@ -7,11 +7,9 @@ from pathlib import Path
 
 import networkx as nx
 import numpy as np
-from qiskit import QuantumCircuit
-from qiskit.converters import circuit_to_dagdependency
 
-from compilation_new import manual_copy_dag, remove_node, update_sequence
 from Cycles import GraphCreator, MemoryZone, get_idx_from_idc
+from get_sequence import parse_qasm
 
 
 def create_starting_config(perc, graph, seed=None):
@@ -100,7 +98,7 @@ def create_move_list(memorygrid, sequence, max_length=5):
     for ion, chain_idx in enumerate(memorygrid.get_state_idxs()):
         if chain_idx in memorygrid.graph_creator.path_from_pz_idxs:
             if chain_idx == memorygrid.graph_creator.entry_edge:
-                # place chain in entry at the end of move_list -> so later looping over list leads to chain in entry being first
+                # place chain in entry at the end of move_list -> looping over list leads to chain in entry being first later
                 chains_in_entry_connections.append(ion)
             else:
                 chains_in_entry_connections.insert(0, ion)
@@ -114,7 +112,8 @@ def create_move_list(memorygrid, sequence, max_length=5):
     return move_list
 
 
-archs = [[3, 4, 2, 2]]  # , [5, 5, 1, 1], [6, 6, 1, 1], [20, 20, 1, 1], [5, 5, 10, 10]]#[5, 5, 1, 1],
+archs = [[3, 4, 2, 2]]
+# , [5, 5, 1, 1], [6, 6, 1, 1]]  # , [20, 20, 1, 1], [5, 5, 10, 10]]#[5, 5, 1, 1],
 seeds = [1]  # , 2, 3, 4, 5, 6, 7, 8, 9, 10]
 perc = 0.5
 results = {}
@@ -147,20 +146,32 @@ for j, arch in enumerate(archs):
         # max_chains_in_pz = 4 # TODO needed?
         max_chains_in_parking = 2
 
-        # two_qubit_sequence = []
-        # i = 0
-        # while i < len(seq):
-        #     if len(seq[i]) == 2:
-        #         two_qubit_sequence.append(i)
-        #     i += 1
-        # two_qubit_sequence.append(
-        #     -1
-        # )  # -1 at the end, so two-qubit sequence is not empty after all 2-qubit gates have been processed
-        # assert (
-        #     two_qubit_sequence[-2] != len(flat_seq) - 1
-        # ), "2-qubit sequence is not valid (last element can not be 2-qubit gate)"
+        # generate sequence and two-qubit sequence
+        N = number_of_registers
+        N = 17
+        filename = "/Users/danielschonberger/Desktop/Heuristic_Shuttler/QASM_files/qft_nativegates_quantinuum_tket_3.qasm"  # "QASM_files/qft_%squbits.qasm" % N
+        # /Users/danielschonberger/Desktop/Heuristic_Github/
+        # write_qft_to_file(N, filename)
+        # print(f"QFT for {N} qubits written to {filename}\n")
 
-        # seq_element_counter = 0
+        seq = parse_qasm(filename)
+        flat_seq = [item for sublist in seq for item in sublist]
+        sequence = flat_seq  # TODO
+
+        two_qubit_sequence = []
+        i = 0
+        while i < len(seq):
+            if len(seq[i]) == 2:
+                two_qubit_sequence.append(i)
+            i += 1
+        two_qubit_sequence.append(
+            -1
+        )  # -1 at the end, so two-qubit sequence is not empty after all 2-qubit gates have been processed
+        assert (
+            two_qubit_sequence[-2] != len(sequence) - 1
+        ), "2-qubit sequence is not valid (last element can not be 2-qubit gate)"
+
+        seq_element_counter = 0
 
         print(f"arch: {arch}, seed: {seed}, registers: {number_of_registers}\n")
         max_timesteps = 50000
@@ -183,60 +194,39 @@ for j, arch in enumerate(archs):
         timestep = 0
         print("time step: %s" % timestep)
 
+        # Save the current plot (plot widget)
+        plot_filename = Path(run_folder) / f"no_compile_plot_{1:03d}.png"
+
+        # Mem1.graph_creator.plot_state(
+        #     [get_idx_from_idc(Mem1.idc_dict, edge_idc) for edge_idc in Mem1.ion_chains.values()],
+        #     labels=[
+        #         "time step %s" % timestep,
+        #         f"next seq elem: {seq[seq_element_counter]}",
+        #     ],
+        #     show_plot=show_plot,
+        #     save_plot=save_plot,
+        #     filename=[plot_filename if save_plot else None][0],
+        # )
+
         seq_ion_was_at_entry = 0
         next_seq_ion_in_exit = 0
 
         seq_ion_was_at_entry = False
         gate_execution_finished = True
 
-        # generate sequence and two-qubit sequence
-        N = number_of_registers
-        filename = "QASM_files/qft_%squbits.qasm" % N
-        # write_qft_to_file(N, filename)
-        # print(f"QFT for {N} qubits written to {filename}\n")
-        # seq = parse_qasm(filename)
-
-        qc = QuantumCircuit.from_qasm_file(filename)
-        dag_dep = circuit_to_dagdependency(qc)
-
-        Mem1.update_distance_map()
-        gate_ids, next_node = update_sequence(dag_dep, Mem1.distance_map)
-        seq = [tuple(gate) for gate in gate_ids]
-        flat_seq = [item for sublist in seq for item in sublist]
-        next_gate_is_two_qubit_gate = len(seq[0]) == 2
-
-        # Save the current plot (plot widget)
-        plot_filename = Path(run_folder) / f"plot_{1:03d}.png"
-
-        Mem1.graph_creator.plot_state(
-            [get_idx_from_idc(Mem1.idc_dict, edge_idc) for edge_idc in Mem1.ion_chains.values()],
-            labels=[
-                "time step %s" % timestep,
-                f"next seq elem: {seq[0]}",
-            ],
-            show_plot=show_plot,
-            save_plot=save_plot,
-            filename=[plot_filename if save_plot else None][0],
-        )
-
         # timestep = 1
         while timestep < max_timesteps:
+            print(f"\ntime step: {timestep}")
             rotate_entry = False
 
             # update state_idxs
             Mem1.get_state_idxs()
 
             ######### PREPROCESS #########
-            Mem1 = preprocess(Mem1, flat_seq)
-
-            Mem1.update_distance_map()
-
-            # TODO update here or only update sequence after gate execution?
-            # new_sequence = update_sequence(dag_dep, Mem1.distance_map)
-            # print(new_sequence, '\n', flat_seq)
+            Mem1 = preprocess(Mem1, sequence)
 
             ######### CREATE MOVE SEQUENCE #########
-            move_list = create_move_list(Mem1, flat_seq)
+            move_list = create_move_list(Mem1, sequence)
 
             ######### CREATE CIRCLES #########
             ### create circles for all chains in move_list (dictionary with chain as key and circle_idcs as value)
@@ -253,7 +243,7 @@ for j, arch in enumerate(archs):
             for rotate_chain in move_list:
                 edge_idc = Mem1.ion_chains[rotate_chain]
                 # if chain is needed again (is present in rest of sequence) -> move (only out of entry) towards exit instead of top left
-                towards = "exit" if rotate_chain in flat_seq[1:] else (0, 0)
+                towards = "exit" if rotate_chain in sequence[1:] else (0, 0)
                 next_edges[rotate_chain] = Mem1.find_next_edge(edge_idc, towards=towards)
 
             for rotate_chain in move_list:
@@ -299,7 +289,7 @@ for j, arch in enumerate(archs):
             ):
                 # find least important chain in parking edge
                 chain_to_move_out_of_pz = Mem1.find_least_import_chain_in_parking(
-                    flat_seq, [*chains_in_parking, chain_to_park]
+                    sequence, [*chains_in_parking, chain_to_park]
                 )
                 if chain_to_move_out_of_pz != chain_to_park:
                     # move it to entry
@@ -337,10 +327,10 @@ for j, arch in enumerate(archs):
 
             ######### PLOT #########
             # Save the current plot (plot widget)
-            plot_filename = Path(run_folder) / f"plot_{timestep:03d}.png"
+            plot_filename = Path(run_folder) / f"no_compile_plot_{timestep:03d}.png"
 
             ######### UPDATE SEQUENCE / PROCESS GATE #########
-            gate = seq[0]
+            gate = seq[seq_element_counter]
             chains_in_parking = Mem1.find_chains_in_parking()
             if sum((gate_element in chains_in_parking) for gate_element in gate) == len(gate):
                 # new TODO use gate_execution_finished or not?
@@ -351,53 +341,44 @@ for j, arch in enumerate(archs):
                 start_execution = time_in_pz_counter == 0
 
                 time_in_pz_counter += 1
-                Mem1.graph_creator.plot_state(
-                    [get_idx_from_idc(Mem1.idc_dict, edge_idc) for edge_idc in Mem1.ion_chains.values()],
-                    labels=[
-                        "time step %s" % timestep,
-                        f"seq elem {seq[0]} execution",
-                    ],
-                    show_plot=show_plot,
-                    save_plot=save_plot,
-                    filename=[plot_filename if save_plot else None][0],
-                )
+                # Mem1.graph_creator.plot_state(
+                #     [get_idx_from_idc(Mem1.idc_dict, edge_idc) for edge_idc in Mem1.ion_chains.values()],
+                #     labels=[
+                #         "time step %s" % timestep,
+                #         f"seq elem {seq[seq_element_counter]} executed",
+                #     ],
+                #     show_plot=show_plot,
+                #     save_plot=save_plot,
+                #     filename=[plot_filename if save_plot else None][0],
+                # )
 
-                print(f"\ntime step: {timestep}, gate {seq[0]} is executed,")
-                time_gate = time_2qubit_gate if next_gate_is_two_qubit_gate is True else time_1qubit_gate
+                print(f"\ntime step: {timestep}, gate {seq[seq_element_counter]} is executed,")
+                time_gate = time_2qubit_gate if seq_element_counter == two_qubit_sequence[0] else time_1qubit_gate
 
                 if time_in_pz_counter == time_gate:
-                    ######### END IF SEQUENCE IS FINISHED #########
-                    if len(seq) == 1:
-                        print("\nFull Sequence executed")
-                        cpu_time_arr.append(time.time() - start_time)
-                        timestep_arr.append(timestep)
-                        break
-
                     for _ in gate:
-                        flat_seq.pop(0)
-                    # if seq_element_counter == two_qubit_sequence[0]:
-                    #     two_qubit_sequence.pop(0)
-                    # seq_element_counter += 1
+                        sequence.pop(0)
+                    if seq_element_counter == two_qubit_sequence[0]:
+                        two_qubit_sequence.pop(0)
+                    seq_element_counter += 1
                     time_in_pz_counter = 0
                     gate_execution_finished = True
 
-                    # update dag
-                    remove_node(dag_dep, next_node)
-                    dag_dep = manual_copy_dag(dag_dep)
+            # else:
+            #     Mem1.graph_creator.plot_state(
+            #         [get_idx_from_idc(Mem1.idc_dict, edge_idc) for edge_idc in Mem1.ion_chains.values()],
+            #         labels=["time step %s" % timestep, f"next seq elem: {seq[seq_element_counter]}"],
+            #         show_plot=show_plot,
+            #         save_plot=save_plot,
+            #         filename=[plot_filename if save_plot else None][0],
+            #     )
 
-                    gate_ids, next_node = update_sequence(dag_dep, Mem1.distance_map)
-                    seq = [tuple(gate) for gate in gate_ids]
-                    flat_seq = [item for sublist in seq for item in sublist]
-                    next_gate_is_two_qubit_gate = len(seq[0]) == 2
-
-            else:
-                Mem1.graph_creator.plot_state(
-                    [get_idx_from_idc(Mem1.idc_dict, edge_idc) for edge_idc in Mem1.ion_chains.values()],
-                    labels=["time step %s" % timestep, f"next seq elem: {seq[0]}"],
-                    show_plot=show_plot,
-                    save_plot=save_plot,
-                    filename=[plot_filename if save_plot else None][0],
-                )
+            ######### END IF SEQUENCE IS FINISHED #########
+            if len(sequence) == 0:
+                print("\nFull Sequence executed")
+                cpu_time_arr.append(time.time() - start_time)
+                timestep_arr.append(timestep)
+                break
 
             ######### SETUP NEW TIME STEP #########
             timestep += 1
@@ -406,11 +387,6 @@ for j, arch in enumerate(archs):
     cpu_time_mean = np.mean(cpu_time_arr)
     results[j] = timestep_mean
     cpu_time_results[j] = cpu_time_mean
-
-    # Open a file for writing
-    with Path.open("benchmark_results.txt", "a") as file:
-        line = f"& {arch[0]} {arch[1]} {arch[2]} {arch[3]} & {number_of_registers}/{n_of_traps} ({int(100*number_of_registers/n_of_traps)}%) & {timestep_mean} & {cpu_time_mean} {'s'} & {timestep_mean} \\\\"
-        file.write(line + "\n")
 
 print("\n archs: \n", dict(enumerate(archs)))
 print("results: \n", results)

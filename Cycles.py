@@ -337,7 +337,6 @@ class MemoryZone:
         v,
         h,
         starting_config,
-        starting_sequence,
         max_timestep,
         max_num_parking,
         time_2qubit_gate=2,
@@ -350,7 +349,6 @@ class MemoryZone:
         self.graph_creator = GraphCreator(m, n, v, h)
         self.graph = self.graph_creator.get_graph()
         self.starting_config = starting_config
-        self.starting_sequence = starting_sequence
         self.max_timestep = max_timestep
         self.max_num_parking = max_num_parking
         self.time_2qubit_gate = time_2qubit_gate
@@ -361,7 +359,11 @@ class MemoryZone:
         # create dictionary with all distances to entry
         self.dist_dict = {}
         for edge_idc in self.graph.edges():
-            self.dist_dict[edge_idc] = calc_dist_to_entry(self.graph_creator, get_idx_from_idc(self.idc_dict, edge_idc))
+            # keep node ordering consistent:
+            edge_idx = get_idx_from_idc(self.idc_dict, edge_idc)
+            self.dist_dict[get_idc_from_idx(self.idc_dict, edge_idx)] = calc_dist_to_entry(
+                self.graph_creator, get_idx_from_idc(self.idc_dict, edge_idc)
+            )
 
         # create dictionary with all distances to entry for all nodes
         self.dist_dict_nodes = {}
@@ -374,7 +376,6 @@ class MemoryZone:
         #     self.path_dict[edge_idc] = calc_dist_to_entry(self.graph_creator, get_idx_from_idc(self.idc_dict, edge_idc))
 
         self.ion_chains = self.starting_config.copy()
-        self.sequence = self.starting_sequence.copy()
 
         self.junction_nodes = [
             node
@@ -400,6 +401,12 @@ class MemoryZone:
             ion_chains_idx.append(get_idx_from_idc(self.idc_dict, chain))
         self.state_idxs = ion_chains_idx
         return ion_chains_idx
+
+    # calc distance to parking edge for all ion chains
+    def update_distance_map(self):
+        self.distance_map = {}
+        for ion_chain, edge_idx in enumerate(self.get_state_idxs()):
+            self.distance_map[ion_chain] = self.dist_dict[get_idc_from_idx(self.idc_dict, edge_idx)]
 
     def count_chains_in_pz(self):
         return len([chain_idx for chain_idx in self.get_state_idxs() if chain_idx in self.graph_creator.pz_edges_idx])
