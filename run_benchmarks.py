@@ -114,7 +114,7 @@ def create_move_list(memorygrid, sequence, max_length=5):
     return move_list
 
 
-archs = [[3, 4, 2, 2]]  # , [5, 5, 1, 1], [6, 6, 1, 1], [20, 20, 1, 1], [5, 5, 10, 10]]#[5, 5, 1, 1],
+archs = [[3, 4, 2, 2], [5, 5, 1, 1], [6, 6, 1, 1]]  # , [20, 20, 1, 1], [5, 5, 10, 10]]#[5, 5, 1, 1],
 seeds = [1]  # , 2, 3, 4, 5, 6, 7, 8, 9, 10]
 perc = 0.5
 results = {}
@@ -145,7 +145,7 @@ for j, arch in enumerate(archs):
         )
         ion_chains, number_of_registers = create_starting_config(perc, graph, seed=seed)
         # max_chains_in_pz = 4 # TODO needed?
-        max_chains_in_parking = 2
+        max_chains_in_parking = 3
 
         # two_qubit_sequence = []
         # i = 0
@@ -407,8 +407,11 @@ for j, arch in enumerate(archs):
     results[j] = timestep_mean
     cpu_time_results[j] = cpu_time_mean
 
-    # Open a file for writing
-    with Path.open("benchmark_results.txt", "a") as file:
+    # Create a Path object for the file
+    file_path = Path("test_benchmark_results.txt")
+
+    # Open the file using the Path object
+    with file_path.open("a") as file:
         line = f"& {arch[0]} {arch[1]} {arch[2]} {arch[3]} & {number_of_registers}/{n_of_traps} ({int(100*number_of_registers/n_of_traps)}%) & {timestep_mean} & {cpu_time_mean} {'s'} & {timestep_mean} \\\\"
         file.write(line + "\n")
 

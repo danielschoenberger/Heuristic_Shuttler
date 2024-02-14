@@ -23,12 +23,15 @@ def get_idc_from_idx(edge_dictionary, idx):
     return edge_dictionary[idx]
 
 
-def get_path_to_node(nx_g, src, tar, exclude_exit=False, exclude_entry=True):
+def get_path_to_node(nx_g, src, tar, exclude_exit=False, exclude_first_entry_connection=True):
     edge_path = []
-    if exclude_entry is True:
+    if exclude_first_entry_connection is True:
         # lambda function to give path over processing zone huge weight -> doesn't take that path if not necessary - now only encludes entry edge -> can use exit (in MemGrid was != trap before and then to exit node -> not PZ node)
         node_path = nx.shortest_path(
-            nx_g, src, tar, lambda _, __, edge_attr_dict: (edge_attr_dict["edge_type"] == "entry") * 1e8 + 1
+            nx_g,
+            src,
+            tar,
+            lambda _, __, edge_attr_dict: (edge_attr_dict["edge_type"] == "first_entry_connection") * 1e8 + 1,
         )
         # also exclude exit edge if necessary
         if exclude_exit is True:
@@ -36,7 +39,8 @@ def get_path_to_node(nx_g, src, tar, exclude_exit=False, exclude_entry=True):
                 nx_g,
                 src,
                 tar,
-                lambda _, __, edge_attr_dict: (edge_attr_dict["edge_type"] in ("entry", "exit")) * 1e8 + 1,
+                lambda _, __, edge_attr_dict: (edge_attr_dict["edge_type"] in ("first_entry_connection", "exit")) * 1e8
+                + 1,
             )
 
     # only exclude exit edge
@@ -55,12 +59,21 @@ def get_path_to_node(nx_g, src, tar, exclude_exit=False, exclude_entry=True):
     return edge_path
 
 
-def calc_dist_to_entry(nx_g_creator, edge_idx):
+def calc_dist_to_pz(nx_g_creator, edge_idx):
     edge_idc = get_idc_from_idx(nx_g_creator.idc_dict, edge_idx)
     node1, node2 = edge_idc[0], edge_idc[1]
-    path1 = get_path_to_node(nx_g_creator.networkx_graph, node1, nx_g_creator.processing_zone)
-    path2 = get_path_to_node(nx_g_creator.networkx_graph, node2, nx_g_creator.processing_zone)
-    return min(len(path1), len(path2))
+
+    path1 = get_path_to_node(
+        nx_g_creator.networkx_graph, node1, nx_g_creator.processing_zone, exclude_first_entry_connection=True
+    )
+    path2 = get_path_to_node(
+        nx_g_creator.networkx_graph, node2, nx_g_creator.processing_zone, exclude_first_entry_connection=True
+    )
+    if edge_idx == get_idx_from_idc(nx_g_creator.idc_dict, nx_g_creator.parking_edge):
+        return 0
+    if edge_idx == get_idx_from_idc(nx_g_creator.idc_dict, nx_g_creator.first_entry_connection_from_pz):
+        return max(len(path1), len(path2)) + 1
+    return min(len(path1), len(path2)) + 1
 
 
 # def circle_is_contained_in_other_circle(subseq, seq):
@@ -236,8 +249,13 @@ class GraphCreator:
                 self.entry_edge = (previous_entry_node, entry_node)
 
             networkx_graph.add_node(entry_node, node_type="entry_connection_node", color="orange")
-            networkx_graph.add_edge(previous_entry_node, entry_node, edge_type="entry", color="k")
+            if entry_node == self.processing_zone:
+                self.first_entry_connection_from_pz = (entry_node, previous_entry_node)
+                networkx_graph.add_edge(previous_entry_node, entry_node, edge_type="first_entry_connection", color="k")
+            else:
+                networkx_graph.add_edge(previous_entry_node, entry_node, edge_type="entry", color="k")
             self.path_from_pz.insert(0, (entry_node, previous_entry_node))
+
             previous_entry_node = entry_node
 
         assert exit_node == entry_node, "Exit and entry do not end in same node"
@@ -361,7 +379,7 @@ class MemoryZone:
         for edge_idc in self.graph.edges():
             # keep node ordering consistent:
             edge_idx = get_idx_from_idc(self.idc_dict, edge_idc)
-            self.dist_dict[get_idc_from_idx(self.idc_dict, edge_idx)] = calc_dist_to_entry(
+            self.dist_dict[get_idc_from_idx(self.idc_dict, edge_idx)] = calc_dist_to_pz(
                 self.graph_creator, get_idx_from_idc(self.idc_dict, edge_idc)
             )
 
@@ -373,7 +391,7 @@ class MemoryZone:
         # # create dictionary with all paths to entry (TODO artifact?)
         # self.path_dict = {}
         # for edge_idc in self.graph.edges():
-        #     self.path_dict[edge_idc] = calc_dist_to_entry(self.graph_creator, get_idx_from_idc(self.idc_dict, edge_idc))
+        #     self.path_dict[edge_idc] = calc_dist_to_pz(self.graph_creator, get_idx_from_idc(self.idc_dict, edge_idc))
 
         self.ion_chains = self.starting_config.copy()
 
@@ -387,7 +405,7 @@ class MemoryZone:
         ]
 
         self.path_entry_to_exit = get_path_to_node(
-            self.graph, self.graph_creator.entry, self.graph_creator.exit, exclude_entry=True
+            self.graph, self.graph_creator.entry, self.graph_creator.exit, exclude_first_entry_connection=True
         )
 
         # precalulculate bfs for top left and exit
@@ -556,14 +574,14 @@ class MemoryZone:
                 self.graph_creator.processing_zone,
                 target_edge[0],
                 exclude_exit=True,
-                exclude_entry=False,
+                exclude_first_entry_connection=False,
             )
             path1 = get_path_to_node(
                 self.graph,
                 self.graph_creator.processing_zone,
                 target_edge[1],
                 exclude_exit=True,
-                exclude_entry=False,
+                exclude_first_entry_connection=False,
             )
             if len(path1) > len(path0):
                 edge_path = [*path0, (target_edge[0], target_edge[1])]
@@ -755,7 +773,11 @@ class MemoryZone:
             path_from_pz = path0
 
         path_to_pz = get_path_to_node(
-            self.graph, path1[0][0], self.graph_creator.processing_zone, exclude_entry=False, exclude_exit=False
+            self.graph,
+            path1[0][0],
+            self.graph_creator.processing_zone,
+            exclude_first_entry_connection=False,
+            exclude_exit=False,
         )
         return path_to_pz + path_from_pz
 
